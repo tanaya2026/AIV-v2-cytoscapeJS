@@ -694,7 +694,9 @@
      *                                 {source: .., target:.., index: 2, ..}
      */
     AIV.addDNANodesToAIVObj = function(DNAObjectData) {
+        //console.log(DNAObjectData);
         var chrNum = DNAObjectData.target.charAt(2).toUpperCase(); //if it was At2g04880 then it'd '2'
+        
         var name = chrNum; // Just for 'm' and 'c'
 
         if (chrNum === "M") {
@@ -704,7 +706,7 @@
             name = "Chloroplast";
         }
 
-        // console.log("addDNANodes", DNAObjectData, "chrNum");
+        //console.log("TD~ addDNANodes", DNAObjectData, "chrNum" , chrNum);
         if (AIV.chromosomesAdded.hasOwnProperty(chrNum)){
             AIV.chromosomesAdded[chrNum].push(DNAObjectData);
         }
@@ -819,6 +821,7 @@
         }
     };
 
+  
     /**
      * @namespace {object} AIV
      * @function resizeEListener - Resize UI listener when app is loaded, i.e. reposition the chr nodes if the browser size changes
@@ -827,69 +830,376 @@
         this.cy.on('resize', this.setDNANodesPosition.bind(AIV));
     };
 
+    // TD added - 29th March
+    const bZIP_AGI_Map = {
+      "AT5G49450": "bZIP1",
+      "AT4G02640": "bZIP10",
+      "AT5G24800": "bZIP9",
+      "AT4G34590": "bZIP11",
+      "AT3G54620": "bZIP25",
+      "AT5G28770": "bZIP63",
+      "AT2G18160": "bZIP2",
+      "AT1G75390": "bZIP44",
+      "AT3G62420": "bZIP53"
+  };
+  
+  // Function to get bZIP name from AGI code
+  function getbZIP(agi) {
+      return bZIP_AGI_Map[agi] || "AGI not found";
+  }
+
+
     /**
      * @namespace {object} AIV
      * @function createPDITable - We need to return a nicely formatted HTML table to be shown in the DNA tooltip. Take in an array of DNA interactions to be parsed and put appropriately in table tags
      * @param {Array.<Object>} arrayPDIdata - array of interaction data i.e. [ {source: .., target:.., index: 2, ..}, {}, {}]
      * @returns {string} - a nicely parsed HTML table
      */
+
     AIV.createPDItable = function (arrayPDIdata) {
-        console.log(arrayPDIdata);
+      let queryPDIsInChr = {};
+      let targets = [];
+      let pubmedRefHashTable = {};
+      let pValueHashTable = {};
+      let htmlTABLE = "<div class='pdi-table-scroll-pane'><table><tbody><tr><th></th>";
+  
+      arrayPDIdata.forEach(function(PDI){
+          if (PDI.bzip1 !== undefined) {
+              let dds_source = PDI.bzip1 + "+" + "\n"  + PDI.bzip2;
+  
+              if (!queryPDIsInChr.hasOwnProperty(dds_source)) {
+                  queryPDIsInChr[dds_source] = []; // Create property with source name
+              }
+              queryPDIsInChr[dds_source].push(PDI.target);
+  
+              if (targets.indexOf(PDI.target) === -1) {
+                  targets.push(PDI.target);
+              }
+          }
+          else {
+              if (!queryPDIsInChr.hasOwnProperty(PDI.source)) {
+                  queryPDIsInChr[PDI.source] = []; // Create property with source name
+              }
+              queryPDIsInChr[PDI.source].push(PDI.target);
+  
+              if (targets.indexOf(PDI.target) === -1) {
+                  targets.push(PDI.target);
+              }
+              pubmedRefHashTable[`${PDI.source}_${PDI.target}`] = PDI.reference;
+              pValueHashTable[`${PDI.source}_${PDI.target}`] = PDI.interolog_confidence;
+          }
+      });
+  
+      // Add headers to table
+      let headers = [];
+      for (let protein of Object.keys(queryPDIsInChr)) {
+          headers.push(protein);
+          htmlTABLE += `<th>${protein}<br>(${queryPDIsInChr[protein].length} PDIs)</th>`;
+      }
+  
+      htmlTABLE += "</tr>";
+  
+      // Process each target DNA gene and generate table rows
+      targets.forEach(function(targetDNAGene, rowIndex){
+          htmlTABLE += `<tr><td>${targetDNAGene}</td>`;
+  
+          for (let queryGene of Object.keys(queryPDIsInChr)) {
+              let cellContent = "<td>";
+  
+              if (queryPDIsInChr[queryGene].indexOf(targetDNAGene) !== -1) {
+                  if (queryGene.includes("+")) {
+                      if (queryPDIsInChr[queryGene].includes(targetDNAGene)) {
+                          // Create image inside table cell
+                          cellContent = `<td style="background-color: #E8E8E8; text-align: center; width: 30px; height: 30px;">
+                              <img src="dDAP-seq_symbol.png" 
+                                   style="max-width: 100%; max-height: 100%; display: block; margin: auto; cursor: pointer;">
+                          </td>`;
+                          
+                          // Add event listener for the image click
+                          cellContent += `
+                              <script>
+                                  document.querySelectorAll("img[src='dDAP-seq_symbol.png']").forEach(function(img) {
+                                      img.addEventListener('click', function() {
+                                          // Get the column index of the clicked image
+                                          // let columnIndex = Array.from(img.closest('td').parentNode.children).indexOf(img.closest('td'));
+  
+                                          // Get the row index (the row is the parent <tr>)
+                                          // let rowIndex = Array.from(img.closest('tr').parentNode.children).indexOf(img.closest('tr'));
+
+                                        // TD added
+                                        // Obtaining the AGIs of bZIPs involved
+                                          AGI_bZIP1 = getbZIP(PDI.bzip1);
+                                          AGI_bZIP2 = getbZIP(PDI.bzip2);
+
+                                        // Obtaining the chrnum,start and end nucleotide by calling API passing in targetgene
+                                        let serviceURL = 'https://bar.utoronto.ca/api/gene_information/single_gene_query/arabidopsis/targetDNAGene';
+                                        
+                                        return $.ajax({
+                                        
+                                        url: serviceURL,
+                                        type: 'GET',
+                                        data: JSON.stringify(postObj),
+                                        dataType: "json"
+                                        })
+                                        .then( res => ( {res: res, ajaxCallType: 'BAR'} )); 
+
+                                        // Not sure where but from the returned API data, extract these parameters:
+                                        // "chromosome": "Chr1", "start": 3631, "end": 5899 and store in variables
+                                        // get 1 from chromosome not Chr1
+                                        
+                                        // Now we should have 4 variables:
+                                        // 1. bZIP no 1
+                                        // 2. bZIP no 2
+                                        // 3. start
+                                        // 4. end
+                                        // 5. chr number as an int
+                                        // AFter this, we just need to put this in the generated Link
+                                        // Put variables in, as we have stored above
+                            
+  
+                                          // Generate the link based on row and column indices
+                                          let generatedLink = http://hlab.bio.nyu.edu/?data=projects%2Fbzip_code_jbrowse&loc=chrnum%chrnumAstart_nuc..end_nuc&tracks=bowtie2_23%2FbZIP_rr%2FbZIPA_Col-B_p1%2Cbowtie2_23%2FbZIP_rr%2FbZIPA_Col-B_p2%2Cgem_07_rep%2FbZIP..bZIP_rr%2Fps-bZIPA..ph-bZIPB_Col..h-B%2Fnuc1_GEM_events%2CAraport11_Ensembl48_genes%2Cgem_07_rep%2FbZIP_rr%2FbZIPB_Col-B%2Fnuc1_GEM_events%2Cgem_07_rep%2FbZIP_rr%2FbZIPA_Col-B%2Fnuc1_GEM_events%2Cbowtie2_23%2FbZIP_rr%2FbZIPB_Col-B_o2%2Cbowtie2_23%2FbZIP_rr%2FbZIPB_Col-B_o1%2Cbowtie2_23%2FbZIP..bZIP_rr%2Fps-bZIPA..ph-bZIPB_Col..h-B_p1%2CAth_TAIR10&highlight=;
+  
+                                          // Log the generated link (this is where you'd redirect)
+                                          console.log("Generated Link: ", generatedLink);
+  
+                                          // Example: Redirect to the generated link
+                                          window.open("http://" + generatedLink, "_blank");
+                                      });
+                                  });
+                              </script>
+                          `;
+                      }
+                  }
+              }
+              else {
+                  cellContent += '';
+              }
+  
+              htmlTABLE += cellContent + '</td>';
+          }
+          htmlTABLE += "</tr>"; 
+      });
+  
+      htmlTABLE += "</tbody></table></div>";
+  
+      return htmlTABLE;
+  };
+  
+
+    /*
+    // CHAITALI
+    AIV.createPDItable = function (arrayPDIdata) {
+      let queryPDIsInChr = {};
+      let targets = [];
+      let pubmedRefHashTable = {};
+      let pValueHashTable = {};
+      let htmlTABLE = "<div class='pdi-table-scroll-pane'><table><tbody><tr><th></th>";
+  
+      arrayPDIdata.forEach(function(PDI){
+          if (PDI.bzip1 !== undefined) {
+              let dds_source = PDI.bzip1 + "+" + "\n"  + PDI.bzip2;
+  
+              if (!queryPDIsInChr.hasOwnProperty(dds_source)) {
+                  queryPDIsInChr[dds_source] = []; // Create property with source name
+              }
+              queryPDIsInChr[dds_source].push(PDI.target);
+  
+              if (targets.indexOf(PDI.target) === -1) {
+                  targets.push(PDI.target);
+              }
+          }
+          else {
+              if (!queryPDIsInChr.hasOwnProperty(PDI.source)) {
+                  queryPDIsInChr[PDI.source] = []; // Create property with source name
+              }
+              queryPDIsInChr[PDI.source].push(PDI.target);
+  
+              if (targets.indexOf(PDI.target) === -1) {
+                  targets.push(PDI.target);
+              }
+              pubmedRefHashTable[`${PDI.source}_${PDI.target}`] = PDI.reference;
+              pValueHashTable[`${PDI.source}_${PDI.target}`] = PDI.interolog_confidence;
+          }
+      });
+  
+      // Add headers to table
+      for (let protein of Object.keys(queryPDIsInChr)) {
+          htmlTABLE += `<th>${protein}<br>(${queryPDIsInChr[protein].length} PDIs)</th>`;
+      }
+  
+      htmlTABLE += "</tr>";
+  
+      // Process each target DNA gene and generate table rows
+      targets.forEach(function(targetDNAGene){
+          htmlTABLE += `<tr><td>${targetDNAGene}</td>`;
+  
+          for (let queryGene of Object.keys(queryPDIsInChr)) {
+              let cellContent = "<td>";
+  
+              if (queryPDIsInChr[queryGene].indexOf(targetDNAGene) !== -1) {
+                  if (queryGene.includes("+")) {
+                      if (queryPDIsInChr[queryGene].includes(targetDNAGene)) {
+                          // Changed part: Create image inside table cell
+                          cellContent = `<td style="background-color: #E8E8E8; text-align: center; width: 30px; height: 30px;">
+                              <img src="dDAP-seq_symbol.png" 
+                                   style="max-width: 100%; max-height: 100%; display: block; margin: auto; cursor: pointer;">
+                          </td>`;
+                          
+                          // Changed part: Add event listener for the image click
+                          cellContent += `
+                              <script>
+                                  document.querySelectorAll("img[src='dDAP-seq_symbol.png']").forEach(function(img) {
+                                      img.addEventListener('click', function() {
+                                          // Dynamically create the link here (for now it opens google)
+                                          window.open("http://hlab.bio.nyu.edu/?data=projects%2Fbzip_code_jbrowse&loc=3%3A1..23459830&tracks=bowtie2_23%2FbZIP_rr%2FbZIP11_Col-B_p1%2Cbowtie2_23%2FbZIP_rr%2FbZIP11_Col-B_p2%2Cgem_07_rep%2FbZIP..bZIP_rr%2Fps-bZIP11..ph-bZIP10_Col..h-B%2Fnuc1_GEM_events&highlight=", "_blank");
+                                      });
+                                  });
+                              </script>
+                          `;
+                      }
+                  }
+              }
+              else {
+                  cellContent += '';
+              }
+  
+              htmlTABLE += cellContent + '</td>';
+          }
+          htmlTABLE += "</tr>"; 
+      });
+  
+      htmlTABLE += "</tbody></table></div>";
+  
+      return htmlTABLE;
+  };
+  */
+
+  
+  /*
+
+    AIV.createPDItable = function (arrayPDIdata) {
+        //console.log('TD~',arrayPDIdata);
         let queryPDIsInChr = {};
         let targets = [];
         let pubmedRefHashTable = {};
         let pValueHashTable = {};
         let htmlTABLE = "<div class='pdi-table-scroll-pane'><table><tbody><tr><th></th>";
         arrayPDIdata.forEach(function(PDI){ //populate local data to be used in another loop
-            // console.log("looping through each element of PDI array", PDI);
-            if (!queryPDIsInChr.hasOwnProperty(PDI.source)) {
-                queryPDIsInChr[PDI.source] = []; //create property with name of query/source gene
+            // TD~ console.log("looping through each element of PDI array", PDI);
+            //TD~
+            //console.log('PDIsInCHR before DDAP',queryPDIsInChr);    
+            //clg(PDI);
+            if (PDI.bzip1 !== undefined) {
+                //console.log('Only enter when bzip1 exists',PDI.bzip1)
+
+                //TD~Mar23 newline for dds data header starts
+                let dds_source = PDI.bzip1 + "+" + "\n"  + PDI.bzip2;
+                //console.log('TD~ DDS Source',dds_source);
+                //TD~Mar23 newline for dds data header ends
+
+                //TD~Mar23 changed hasownproperty starts
+                if (!queryPDIsInChr.hasOwnProperty(dds_source)) {
+                    queryPDIsInChr[dds_source] = []; //create property with name of query/source gene
+                }
+                //TD~Mar23 changed hasownproperty ends
+
+                queryPDIsInChr[dds_source].push(PDI.target);    
+                //console.log('TD~ After Push',queryPDIsInChr,PDI.target)
+                
+                if (targets.indexOf(PDI.target) === -1) {//To not repeat PDI for two queries with same PDI
+                    targets.push(PDI.target);
+                }
+                //pubmedRefHashTable[`${PDI.source}_${PDI.target}`] = 9999; 
             }
-            queryPDIsInChr[PDI.source].push(PDI.target);
-            if (targets.indexOf(PDI.target) === -1) {//To not repeat PDI for two queries with same PDI
-                targets.push(PDI.target);
+            else {
+                if (!queryPDIsInChr.hasOwnProperty(PDI.source)) {
+                    queryPDIsInChr[PDI.source] = []; //create property with name of query/source gene
+                }
+                queryPDIsInChr[PDI.source].push(PDI.target);
+                if (targets.indexOf(PDI.target) === -1) {//To not repeat PDI for two queries with same PDI
+                    targets.push(PDI.target);
+                }
+                pubmedRefHashTable[`${PDI.source}_${PDI.target}`] = PDI.reference;
+                pValueHashTable[`${PDI.source}_${PDI.target}`] = PDI.interolog_confidence;
+    
             }
-            pubmedRefHashTable[`${PDI.source}_${PDI.target}`] = PDI.reference;
-            pValueHashTable[`${PDI.source}_${PDI.target}`] = PDI.interolog_confidence;
         });
+        
+        //TD~
+        //console.log('TD~ PDIsInCHR after DDAP',queryPDIsInChr);    
+
         for (let protein of Object.keys(queryPDIsInChr)) { //add query proteins to the header of table
             htmlTABLE += `<th>${protein}<br>(${queryPDIsInChr[protein].length} PDIs)</th>`;
         }
+        
         htmlTABLE += "</tr>";
         targets.forEach(function(targetDNAGene){ //process remaining rows for each target DNA gene
             htmlTABLE += `<tr><td>${targetDNAGene}</td>`;
             for (let queryGene of Object.keys(queryPDIsInChr)) { //recall the keys are the source (i.e. query genes)
-                if (queryPDIsInChr[queryGene].indexOf(targetDNAGene) !== -1) { //indexOf returns -1 if not found
-                    let cellContent = "<td>";
-                    let fontawesome = '';
-                    if (pValueHashTable[queryGene + '_' + targetDNAGene] === 0){ //i.e. experimental PDI
-                       cellContent = "<td class='experimental-pdi-cell'>";
-                       fontawesome = 'flask';
-                       if (pubmedRefHashTable[queryGene + '_' + targetDNAGene] === "doi:10.1016/j.cell.2016.04.038"){ // TODO: change this to  DAP-Seq PMID once db is updated
-                           fontawesome = 'dna';
-                       }
+                //console.log('TD~ QueryGENE::',queryGene,targetDNAGene)
+                if (queryGene.includes("+")) {
+                    let cellContent = '<td>';
+
+                    if (queryPDIsInChr[queryGene].includes(targetDNAGene)) {
+                      
+                //cellContent += `<td style="background-color: #E8E8E8; text-align: center; width: 30px; height: 30px;">
+                //<a href="https://www.google.com" target="_blank">
+                   //<img src="dDAP-seq_symbol.png" 
+                       // style="max-width: 100%; max-height: 100%; display: block; margin: auto; cursor: pointer;">
+               // </a>
+             //</td>`;
+
                     }
-                    else if (pValueHashTable[queryGene + '_' + targetDNAGene] > 0){ // i.e. predicted PDI
-                        cellContent = "<td class='predicted-pdi-cell'>";
-                        fontawesome = 'terminal';
+                    else {
+                        cellContent += ''; 
+                        //console.log('TD~ In else',targetDNAGene,cellContent)
                     }
-                    AIV.memoizedSanRefIDs(pubmedRefHashTable[queryGene + '_' + targetDNAGene]).forEach(function(ref){
-                        cellContent += AIV.memoizedRetRefLink(ref, targetDNAGene, queryGene).replace(/("_blank">).*/, "$1") + /* replace innerHTML text returned */
-                            `<i class="fas fa-${fontawesome}"></i>` +
-                            '</a>';
-                    });
-                    htmlTABLE += cellContent + '</td>';
+                    
+                    cellContent += '</td>'; 
+                    //console.log("TD~ Cell:",cellContent);
+                    htmlTABLE += cellContent;
                 }
+                    */
+                   /*
                 else {
-                    htmlTABLE += '<td></td>';
+                    if (queryPDIsInChr[queryGene].indexOf(targetDNAGene) !== -1) { //indexOf returns -1 if not found
+                        let cellContent = "<td>";
+                        let fontawesome = '';
+                        if (pValueHashTable[queryGene + '_' + targetDNAGene] === 0){ //i.e. experimental PDI
+                           cellContent = "<td class='experimental-pdi-cell'>";
+                           fontawesome = 'flask';
+                           if (pubmedRefHashTable[queryGene + '_' + targetDNAGene] === "doi:10.1016/j.cell.2016.04.038"){ // TODO: change this to  DAP-Seq PMID once db is updated
+                               fontawesome = 'dna';
+                           }
+                        }
+                           */
+                          /*
+                        else if (pValueHashTable[queryGene + '_' + targetDNAGene] > 0){ // i.e. predicted PDI
+                            cellContent = "<td class='predicted-pdi-cell'>";
+                            fontawesome = 'terminal';
+                            */
+                        //}
+                        //AIV.memoizedSanRefIDs(pubmedRefHashTable[queryGene + '_' + targetDNAGene]).forEach(function(ref){
+                            //cellContent += AIV.memoizedRetRefLink(ref, targetDNAGene, queryGene).replace(/("_blank">).*/, "$1") + /* replace innerHTML text returned */
+                                //`<i class="fas fa-${fontawesome}"></i>` +
+                                //'</a>';
+                       //});
+                        /*
+                        htmlTABLE += cellContent + '</td>';
+                    }
+                    else {
+                        htmlTABLE += '<td></td>';
+                    }
                 }
             }
-            htmlTABLE += "</tr>";
+            htmlTABLE += "</tr>"; 
         });
         htmlTABLE += "</tbody></table></div>";
         // console.log("finished createPDITable function execution", queryPDIsInChr);
         return htmlTABLE;
     };
+  */
 
     /**
      * @namespace {object} AIV
@@ -1162,10 +1472,14 @@
      * @param {string} JSONReferenceString - as a string of links delimited by newlines "\n"
      */
     AIV.sanitizeReferenceIDs = function(JSONReferenceString) {
+        //console.log('JSONRefString',JSONReferenceString)
+        if (JSONReferenceString !== undefined) {
         let returnArray = JSONReferenceString.split("\n");
         returnArray = returnArray.filter(item => item !== '');
         // console.log("sanitized ,", returnArray);
         return returnArray;
+        }
+        return 
     };
 
     /**
@@ -1191,7 +1505,7 @@
      * @return {string} - a link from the above list
      */
     AIV.returnReferenceLink = function(referenceStr, AGIIdentifier, TF) {
-        console.trace(referenceStr, AGIIdentifier, TF);
+        //console.trace(referenceStr, AGIIdentifier, TF);
         let regexGroup; //this variable necessary to extract parts from the reference string param
         let db = referenceStr.match(/^([A-Z]+)-*/i)[1] + " - ";
         if ( (regexGroup = referenceStr.match(/PubMed[:]?(\d+)$/i)) ) { //assign and evaluate if true immediately
@@ -1249,11 +1563,16 @@
      * @param {object} data - response JSON we get from the get_interactions_dapseq PHP webservice at the BAR
      */
     AIV.parseBARInteractionsData = function(data) {
+        console.log('TD~ Sent data',data);
+            
         let publicationsPPIArr = []; //local variable to store all unique publications that came from the JSON
         for (let geneQuery of Object.keys(data)) {
-
+            //console.log('parseBar->geneQuery',geneQuery);
+            if (geneQuery === 'Double_Dap_Seq') {
+                continue
+            }    
             let dataSubset = data[geneQuery]; //'[]' expression to access an object property
-
+            console.log('TD~Datasubset is:',dataSubset)
             // Add Nodes for each query
             for (let i = 0; i < dataSubset.length; i++) {
                 let typeSource = '';
@@ -1270,7 +1589,7 @@
                 } else {
                     typeSource = 'Effector';
                 }
-
+                //console.log('TD~typeSource',typeSource)  
                 // Target
                 if (target.match(/^AT[1-5MC]G\d{5}$/i)) {
                     if (index === '2') {
@@ -1281,7 +1600,7 @@
                 } else {
                     typeTarget = 'Effector';
                 }
-
+                //console.log('TD~typeTarget',typeTarget)
                 //Build publication array for dropdown later
                 if (publicationsPPIArr.indexOf(reference) === -1){
                     if (typeTarget === 'Protein' || typeTarget === 'Effector'){
@@ -1302,7 +1621,12 @@
                         this.addNode(target, typeTarget);
                     }
                 } else { //i.e. typeTarget === "DNA"
-                    this.addDNANodesToAIVObj(edgeData); //pass the DNA in the JSON format we GET on
+                    console.log('TD~addDNA',edgeData)
+                    //TD~Mar23 Check that source is in the geneList starts
+                    if(this.genesList.includes(source)) {
+                      this.addDNANodesToAIVObj(edgeData); //pass the DNA in the JSON format we GET on
+                    }
+                    //TD~Mar23 Check that source is in the geneList ends
                 }
 
                 if (index !== '2') { //i.e. PPI edge
@@ -1336,6 +1660,9 @@
                 }
             }
         } //end of adding nodes and edges
+            
+
+
 
         let filteredPubsArr = [].concat.apply([], publicationsPPIArr.map(function (innerArr) {
             return innerArr.split('\n').filter(function (item) {
@@ -1373,7 +1700,33 @@
             }
 
             return num;
-        }
+        }    
+    //TD~Mar23add code for DDS
+    let DDS_data = data.hasOwnProperty("Double_Dap_Seq")?data["Double_Dap_Seq"]:undefined;
+      if(DDS_data != undefined) {    
+        //console.log("DDS Data", DDS_data);
+        for (let i = 0 ; i < DDS_data.length; i++) {
+
+            //TD~Mar23~Check and change target gene case starts
+            DDS_data[i].bzip1 = DDS_data[i].bzip1.charAt(0) + DDS_data[i].bzip1.substring(1).toLowerCase();
+            
+            DDS_data[i].bzip2 = DDS_data[i].bzip2.charAt(0) + DDS_data[i].bzip2.substring(1).toLowerCase();    
+
+            DDS_data[i].target = DDS_data[i].target.charAt(0) + DDS_data[i].target.substring(1).toLowerCase();
+
+            //find if bzip1 is in genesList
+            //console.log("TD~GenesList",this.genesList)
+            if (this.genesList.includes(DDS_data[i].bzip1) || this.genesList.includes(DDS_data[i].bzip2)) {
+              let edgeData = DDS_data[i];
+              let { bzip1, bzip2, target } = edgeData;
+              this.addDNANodesToAIVObj(edgeData);
+            }
+            
+            //TD~Mar23~Check and change target gene case ends
+            
+        }    
+        //console.log('TD~ At the end data',AIV.Double_Dap_Seq)
+      } // if dds_data ends
     };
 
     /**
@@ -1998,11 +2351,11 @@
         if ($('#queryBioGrid').is(':checked')) {
             promisesArr = promisesArr.concat(this.createBioGridAjaxPromise());
         }
-        // console.log(promisesArr);
+        //console.log('PrmisesArray:',promisesArr);
 
         Promise.all(promisesArr)
             .then(function(promiseRes) {
-                // console.log("Response:", promiseRes);
+                 //console.log("Response:", promiseRes);
                 // Add Query node (user inputed in HTML form)
                 for (let i = 0; i < AIV.genesList.length; i++) {
                     if (AIV.genesList[i].match(/^AT[1-5MC]G\d{5}$/i)) {
@@ -2012,11 +2365,13 @@
                         AIV.addNode(AIV.genesList[i], 'Effector', true);
                     }
                 }
-
+                //console.log('Before parsing bar data')
                 // Parse data and make cy elements object
                 for (let i = 0; i < promiseRes.length; i++) {
                     if (promiseRes[i].ajaxCallType === "BAR"){
+                        //console.log('Processing ', promiseRes[i].res)
                         AIV.parseBARInteractionsData(promiseRes[i].res);
+                        
                     }
                     else {
                         AIV.parsePSICQUICInteractionsData(promiseRes[i].res, promiseRes[i].queryGene, promiseRes[i].ajaxCallType);
@@ -2024,7 +2379,7 @@
                 }
 
                 // Update styling and add qTips as nodes have now been added to the cy core
-
+                //console.log('Before creating table from edges')
                 AIV.createTableFromEdges();
                 // AIV.addInteractionRowsToDOM();
                 // console.log(AIV.cy.nodes().length, 'nodes');
@@ -2036,7 +2391,7 @@
                     nodeAgiNames = nodeAgiNames.concat(AIV.chromosomesAdded[chr].map( prop => prop.target));
                 }
                 let uniqueNodeAgiNames = Array.from(new Set(nodeAgiNames)); // remove duplicates to make quicker requests
-                AIV.fetchGeneAnnoForTable(uniqueNodeAgiNames);
+                //AIV.fetchGeneAnnoForTable(uniqueNodeAgiNames);
                 AIV.addChrNodeQtips();
                 AIV.addNumberOfPDIsToNodeLabel();
                 AIV.addProteinNodeQtips();
@@ -2060,7 +2415,7 @@
                 alertify.logPosition("top right");
                 alertify.error(`Error during fetching interaction data, try BAR if using PSICQUIC services, status code: ${err.status}`);
             })
-            .then(AIV.returnSVGandMapManThenChain);
+           // .then(AIV.returnSVGandMapManThenChain);
 
     };
 
@@ -2144,16 +2499,2752 @@
         // DNA
         postObj.querydna = $('#queryDna').is(':checked');
 
-        let serviceURL = 'https://bar.utoronto.ca/interactions2/cgi-bin/get_interactions_dapseq.php';
+        // let serviceURL = 'https://bar.utoronto.ca/interactions2/cgi-bin/get_interactions_dapseq.php';
+        let serviceURL = 'http://bar.utoronto.ca/~nprovart/sample-double-bzip.json';
 
         return $.ajax({
             url: serviceURL,
-            type: 'POST',
+             // TD added
+            // type: 'POST',
+            type: 'GET',
+            // type: 'POST',
             data: JSON.stringify(postObj),
             contentType: "application/json",
             dataType: "json"
         })
-            .then( res => ( {res: res, ajaxCallType: 'BAR'} )); //ajaxCallType for identifying when parsing Promise.all response array
+            .then( res => ( {res: res, ajaxCallType: 'BAR'} )); 
+            /*
+        var res = {
+            "At1g04880": [{
+              "source": "At1g04880",
+              "target": "At1g01060",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.08,
+              "published": true,
+              "reference": "doi:10.1038\/nmeth.4343",
+              "mi": "None"
+            }, {
+              "source": "At1g04880",
+              "target": "At1g04880",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 1,
+              "published": true,
+              "reference": "biogrid:1172859\npubmed:24923357",
+              "mi": "0055"
+            }, {
+              "source": "At1g04880",
+              "target": "At1g22130",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.684,
+              "published": true,
+              "reference": "biogrid:1172858\npubmed:24923357",
+              "mi": "0055"
+            }, {
+              "source": "At1g04880",
+              "target": "At1g54330",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.133,
+              "published": true,
+              "reference": "doi:10.1038\/nmeth.4343",
+              "mi": "None"
+            }, {
+              "source": "At1g04880",
+              "target": "At1g77980",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.617,
+              "published": true,
+              "reference": "biogrid:1172857\npubmed:24923357",
+              "mi": "0055"
+            }, {
+              "source": "At1g04880",
+              "target": "At5g05120",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": "None",
+              "published": true,
+              "reference": "doi:10.1038\/nmeth.4343",
+              "mi": "None"
+            }, {
+              "source": "At1g04880",
+              "target": "At1g16410",
+              "index": "2",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.147,
+              "published": true,
+              "reference": "pubmed:25352272",
+              "mi": "0432"
+            }, {
+              "source": "At1g04880",
+              "target": "At1g18590",
+              "index": "2",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.206,
+              "published": true,
+              "reference": "pubmed:25352272",
+              "mi": "0432"
+            }, {
+              "source": "At1g04880",
+              "target": "At1g62540",
+              "index": "2",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.07,
+              "published": true,
+              "reference": "pubmed:25352272",
+              "mi": "0432"
+            }, {
+              "source": "At1g04880",
+              "target": "At1g62560",
+              "index": "2",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.135,
+              "published": true,
+              "reference": "pubmed:25352272",
+              "mi": "0432"
+            }, {
+              "source": "At1g04880",
+              "target": "At1g62570",
+              "index": "2",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.103,
+              "published": true,
+              "reference": "pubmed:25352272",
+              "mi": "0432"
+            }, {
+              "source": "At1g04880",
+              "target": "At1g65860",
+              "index": "2",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.128,
+              "published": true,
+              "reference": "pubmed:25352272",
+              "mi": "0432"
+            }, {
+              "source": "At1g04880",
+              "target": "At1g65880",
+              "index": "2",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.013,
+              "published": true,
+              "reference": "pubmed:25352272",
+              "mi": "0432"
+            }, {
+              "source": "At1g04880",
+              "target": "At1g71930",
+              "index": "2",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.01,
+              "published": true,
+              "reference": "pubmed:22037706",
+              "mi": "0432"
+            }, {
+              "source": "At1g04880",
+              "target": "At2g20610",
+              "index": "2",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.275,
+              "published": true,
+              "reference": "pubmed:25352272",
+              "mi": "0432"
+            }, {
+              "source": "At1g04880",
+              "target": "At2g25450",
+              "index": "2",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.211,
+              "published": true,
+              "reference": "pubmed:25352272",
+              "mi": "0432"
+            }, {
+              "source": "At1g04880",
+              "target": "At2g30860",
+              "index": "2",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.298,
+              "published": true,
+              "reference": "pubmed:25352272",
+              "mi": "0432"
+            }, {
+              "source": "At1g04880",
+              "target": "At2g31790",
+              "index": "2",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.21,
+              "published": true,
+              "reference": "pubmed:25352272",
+              "mi": "0432"
+            }, {
+              "source": "At1g04880",
+              "target": "At3g03190",
+              "index": "2",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.149,
+              "published": true,
+              "reference": "pubmed:25352272",
+              "mi": "0432"
+            }, {
+              "source": "At1g04880",
+              "target": "At3g19710",
+              "index": "2",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.207,
+              "published": true,
+              "reference": "pubmed:25352272",
+              "mi": "0432"
+            }, {
+              "source": "At1g04880",
+              "target": "At3g25710",
+              "index": "2",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.072,
+              "published": true,
+              "reference": "pubmed:22037706",
+              "mi": "0432"
+            }, {
+              "source": "At1g04880",
+              "target": "At3g43430",
+              "index": "2",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.107,
+              "published": true,
+              "reference": "pubmed:22037706",
+              "mi": "0432"
+            }, {
+              "source": "At1g04880",
+              "target": "At4g03060",
+              "index": "2",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.093,
+              "published": true,
+              "reference": "pubmed:25352272",
+              "mi": "0432"
+            }, {
+              "source": "At1g04880",
+              "target": "At4g12030",
+              "index": "2",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.163,
+              "published": true,
+              "reference": "pubmed:25352272",
+              "mi": "0432"
+            }, {
+              "source": "At1g04880",
+              "target": "At4g13770",
+              "index": "2",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.206,
+              "published": true,
+              "reference": "pubmed:25352272",
+              "mi": "0432"
+            }, {
+              "source": "At1g04880",
+              "target": "At4g37650",
+              "index": "2",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.008,
+              "published": true,
+              "reference": "pubmed:22037706",
+              "mi": "0432"
+            }, {
+              "source": "At1g04880",
+              "target": "At5g07470",
+              "index": "2",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.065,
+              "published": true,
+              "reference": "pubmed:25352272",
+              "mi": "0432"
+            }, {
+              "source": "At1g04880",
+              "target": "At5g07700",
+              "index": "2",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.107,
+              "published": true,
+              "reference": "pubmed:25352272",
+              "mi": "0432"
+            }, {
+              "source": "At1g04880",
+              "target": "At5g12870",
+              "index": "2",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.097,
+              "published": true,
+              "reference": "pubmed:22037706",
+              "mi": "0432"
+            }, {
+              "source": "At1g04880",
+              "target": "At5g23010",
+              "index": "2",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.182,
+              "published": true,
+              "reference": "pubmed:25352272",
+              "mi": "0432"
+            }, {
+              "source": "At1g04880",
+              "target": "At5g23020",
+              "index": "2",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.144,
+              "published": true,
+              "reference": "pubmed:25352272",
+              "mi": "0432"
+            }, {
+              "source": "At1g04880",
+              "target": "At5g61420",
+              "index": "2",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.194,
+              "published": true,
+              "reference": "pubmed:25352272",
+              "mi": "0432"
+            }],
+            "At1g25420": [{
+              "source": "At1g25420",
+              "target": "At3g58750",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.077,
+              "published": true,
+              "reference": "pubmed:21798944\nAI-1 MAIN\ndoi:10.1126\/science.1203877\nbiogrid:599001",
+              "mi": "0018|0018"
+            }, {
+              "source": "At1g25420",
+              "target": "At4g32190",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.118,
+              "published": true,
+              "reference": "pubmed:21798944\nAI-1 MAIN\ndoi:10.1126\/science.1203659\ndoi:10.1126\/science.1203877\nbiogrid:596444",
+              "mi": "0018|0018"
+            }, {
+              "source": "At1g25420",
+              "target": "At5g45100",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": "None",
+              "published": true,
+              "reference": "doi:10.1126\/science.1203659",
+              "mi": "None"
+            }, {
+              "source": "At1g25420",
+              "target": "At1g04270",
+              "index": "1",
+              "interolog_confidence": 2,
+              "correlation_coefficient": 0.613,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }, {
+              "source": "At1g25420",
+              "target": "At1g48970",
+              "index": "1",
+              "interolog_confidence": 1,
+              "correlation_coefficient": 0.8,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }, {
+              "source": "At1g25420",
+              "target": "At1g53880",
+              "index": "1",
+              "interolog_confidence": 1,
+              "correlation_coefficient": 0.786,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }, {
+              "source": "At1g25420",
+              "target": "At1g72340",
+              "index": "0",
+              "interolog_confidence": 1,
+              "correlation_coefficient": 0.556,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }, {
+              "source": "At1g25420",
+              "target": "At1g73030",
+              "index": "1",
+              "interolog_confidence": 4,
+              "correlation_coefficient": 0.679,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }, {
+              "source": "At1g25420",
+              "target": "At2g06530",
+              "index": "1",
+              "interolog_confidence": 1,
+              "correlation_coefficient": 0.648,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }, {
+              "source": "At1g25420",
+              "target": "At2g19830",
+              "index": "1",
+              "interolog_confidence": 1,
+              "correlation_coefficient": 0.46,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }, {
+              "source": "At1g25420",
+              "target": "At2g25355",
+              "index": "0",
+              "interolog_confidence": 1,
+              "correlation_coefficient": 0.681,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }, {
+              "source": "At1g25420",
+              "target": "At2g27600",
+              "index": "0",
+              "interolog_confidence": 40,
+              "correlation_coefficient": 0.817,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }, {
+              "source": "At1g25420",
+              "target": "At2g34970",
+              "index": "0",
+              "interolog_confidence": 2,
+              "correlation_coefficient": 0.754,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }, {
+              "source": "At1g25420",
+              "target": "At2g45500",
+              "index": "0",
+              "interolog_confidence": 2,
+              "correlation_coefficient": 0.761,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }, {
+              "source": "At1g25420",
+              "target": "At3g07300",
+              "index": "0",
+              "interolog_confidence": 2,
+              "correlation_coefficient": 0.775,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }, {
+              "source": "At1g25420",
+              "target": "At3g20630",
+              "index": "0",
+              "interolog_confidence": 2,
+              "correlation_coefficient": 0.413,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }, {
+              "source": "At1g25420",
+              "target": "At3g23270",
+              "index": "1",
+              "interolog_confidence": 1,
+              "correlation_coefficient": 0.177,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }, {
+              "source": "At1g25420",
+              "target": "At3g43810",
+              "index": "0",
+              "interolog_confidence": 1,
+              "correlation_coefficient": 0.563,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }, {
+              "source": "At1g25420",
+              "target": "At4g29020",
+              "index": "0",
+              "interolog_confidence": 1,
+              "correlation_coefficient": 0.482,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }, {
+              "source": "At1g25420",
+              "target": "At4g32175",
+              "index": "1",
+              "interolog_confidence": 1,
+              "correlation_coefficient": 0,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }, {
+              "source": "At1g25420",
+              "target": "At5g04850",
+              "index": "1",
+              "interolog_confidence": 1,
+              "correlation_coefficient": 0.801,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }, {
+              "source": "At1g25420",
+              "target": "At5g14170",
+              "index": "0",
+              "interolog_confidence": 2,
+              "correlation_coefficient": 0.818,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }, {
+              "source": "At1g25420",
+              "target": "At5g20920",
+              "index": "0",
+              "interolog_confidence": 2,
+              "correlation_coefficient": 0.718,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }, {
+              "source": "At1g25420",
+              "target": "At5g21274",
+              "index": "1",
+              "interolog_confidence": 1,
+              "correlation_coefficient": 0,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }, {
+              "source": "At1g25420",
+              "target": "At5g22770",
+              "index": "1",
+              "interolog_confidence": 1,
+              "correlation_coefficient": 0.699,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }, {
+              "source": "At1g25420",
+              "target": "At5g37510",
+              "index": "0",
+              "interolog_confidence": 2,
+              "correlation_coefficient": 0.71,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }, {
+              "source": "At1g25420",
+              "target": "At5g38640",
+              "index": "0",
+              "interolog_confidence": 1,
+              "correlation_coefficient": 0.086,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }, {
+              "source": "At1g25420",
+              "target": "At5g49650",
+              "index": "0",
+              "interolog_confidence": 2,
+              "correlation_coefficient": 0.893,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }, {
+              "source": "At1g25420",
+              "target": "At5g52640",
+              "index": "1",
+              "interolog_confidence": 1,
+              "correlation_coefficient": 0.022,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }],
+            "At2g34970": [{
+              "source": "At2g34970",
+              "target": "At1g04510",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.592,
+              "published": true,
+              "reference": "pubmed:32191846",
+              "mi": "2223"
+            }, {
+              "source": "At2g34970",
+              "target": "At1g06220",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.583,
+              "published": true,
+              "reference": "pubmed:32191846",
+              "mi": "2223"
+            }, {
+              "source": "At2g34970",
+              "target": "At1g53750",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.494,
+              "published": true,
+              "reference": "pubmed:32191846",
+              "mi": "2223"
+            }, {
+              "source": "At2g34970",
+              "target": "At1g53780",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.494,
+              "published": true,
+              "reference": "pubmed:32191846",
+              "mi": "2223"
+            }, {
+              "source": "At2g34970",
+              "target": "At1g60620",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.334,
+              "published": true,
+              "reference": "pubmed:32191846",
+              "mi": "2223"
+            }, {
+              "source": "At2g34970",
+              "target": "At1g60850",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.57,
+              "published": true,
+              "reference": "pubmed:32191846",
+              "mi": "2223"
+            }, {
+              "source": "At2g34970",
+              "target": "At1g62020",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.39,
+              "published": true,
+              "reference": "pubmed:32191846",
+              "mi": "2223"
+            }, {
+              "source": "At2g34970",
+              "target": "At2g15400",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.547,
+              "published": true,
+              "reference": "pubmed:32191846",
+              "mi": "2223"
+            }, {
+              "source": "At2g34970",
+              "target": "At2g15430",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.547,
+              "published": true,
+              "reference": "pubmed:32191846",
+              "mi": "2223"
+            }, {
+              "source": "At2g34970",
+              "target": "At2g16200",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.148,
+              "published": true,
+              "reference": "pubmed:32191846",
+              "mi": "2223"
+            }, {
+              "source": "At2g34970",
+              "target": "At2g20140",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.638,
+              "published": true,
+              "reference": "pubmed:32191846",
+              "mi": "2223"
+            }, {
+              "source": "At2g34970",
+              "target": "At2g20580",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.183,
+              "published": true,
+              "reference": "pubmed:32191846",
+              "mi": "2223"
+            }, {
+              "source": "At2g34970",
+              "target": "At2g21390",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.447,
+              "published": true,
+              "reference": "pubmed:32191846",
+              "mi": "2223"
+            }, {
+              "source": "At2g34970",
+              "target": "At2g33340",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.384,
+              "published": true,
+              "reference": "pubmed:32191846",
+              "mi": "2223"
+            }, {
+              "source": "At2g34970",
+              "target": "At2g39990",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.603,
+              "published": true,
+              "reference": "pubmed:32191846",
+              "mi": "2223"
+            }, {
+              "source": "At2g34970",
+              "target": "At2g40660",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.357,
+              "published": true,
+              "reference": "pubmed:32191846",
+              "mi": "2223"
+            }, {
+              "source": "At2g34970",
+              "target": "At2g44070",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.349,
+              "published": true,
+              "reference": "pubmed:32191846",
+              "mi": "2223"
+            }, {
+              "source": "At2g34970",
+              "target": "At3g11270",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.529,
+              "published": true,
+              "reference": "pubmed:32191846",
+              "mi": "2223"
+            }, {
+              "source": "At2g34970",
+              "target": "At3g23145",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": "None",
+              "published": true,
+              "reference": "pubmed:32191846",
+              "mi": "2223"
+            }, {
+              "source": "At2g34970",
+              "target": "At3g49830",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.089,
+              "published": true,
+              "reference": "pubmed:32191846",
+              "mi": "2223"
+            }, {
+              "source": "At2g34970",
+              "target": "At4g08140",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.235,
+              "published": true,
+              "reference": "pubmed:32191846",
+              "mi": "2223"
+            }, {
+              "source": "At2g34970",
+              "target": "At4g10320",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": "None",
+              "published": true,
+              "reference": "pubmed:32191846",
+              "mi": "2223"
+            }, {
+              "source": "At2g34970",
+              "target": "At4g19006",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": "None",
+              "published": true,
+              "reference": "pubmed:32191846",
+              "mi": "2223"
+            }, {
+              "source": "At2g34970",
+              "target": "At4g28470",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": "None",
+              "published": true,
+              "reference": "pubmed:32191846",
+              "mi": "2223"
+            }, {
+              "source": "At2g34970",
+              "target": "At4g29040",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.372,
+              "published": true,
+              "reference": "pubmed:32191846",
+              "mi": "2223"
+            }, {
+              "source": "At2g34970",
+              "target": "At4g31480",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.416,
+              "published": true,
+              "reference": "pubmed:32191846",
+              "mi": "2223"
+            }, {
+              "source": "At2g34970",
+              "target": "At4g31490",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.416,
+              "published": true,
+              "reference": "pubmed:32191846",
+              "mi": "2223"
+            }, {
+              "source": "At2g34970",
+              "target": "At4g34450",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.283,
+              "published": true,
+              "reference": "pubmed:32191846",
+              "mi": "2223"
+            }, {
+              "source": "At2g34970",
+              "target": "At5g05780",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.41,
+              "published": true,
+              "reference": "pubmed:32191846",
+              "mi": "2223"
+            }, {
+              "source": "At2g34970",
+              "target": "At5g09900",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.511,
+              "published": true,
+              "reference": "pubmed:32191846",
+              "mi": "2223"
+            }, {
+              "source": "At2g34970",
+              "target": "At5g20920",
+              "index": "0",
+              "interolog_confidence": 60,
+              "correlation_coefficient": 0.537,
+              "published": true,
+              "reference": "pubmed:21798944\nAI-1 MAIN\ndoi:10.1126\/science.1203877\nbiogrid:597258",
+              "mi": "0018|0018"
+            }, {
+              "source": "At2g34970",
+              "target": "At5g25230",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.583,
+              "published": true,
+              "reference": "pubmed:32191846",
+              "mi": "2223"
+            }, {
+              "source": "At2g34970",
+              "target": "At5g26710",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.516,
+              "published": true,
+              "reference": "pubmed:32191846",
+              "mi": "2223"
+            }, {
+              "source": "At2g34970",
+              "target": "At5g45620",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.481,
+              "published": true,
+              "reference": "pubmed:32191846",
+              "mi": "2223"
+            }, {
+              "source": "At2g34970",
+              "target": "At5g58290",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.21,
+              "published": true,
+              "reference": "pubmed:32191846",
+              "mi": "2223"
+            }, {
+              "source": "At2g34970",
+              "target": "At5g64760",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.567,
+              "published": true,
+              "reference": "pubmed:32191846",
+              "mi": "2223"
+            }, {
+              "source": "At2g34970",
+              "target": "At5g67630",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.612,
+              "published": true,
+              "reference": "pubmed:32191846",
+              "mi": "2223"
+            }, {
+              "source": "At2g34970",
+              "target": "HARXLL429",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": "None",
+              "published": true,
+              "reference": "doi:10.1126\/science.1203659",
+              "mi": "0018"
+            }, {
+              "source": "At2g34970",
+              "target": "At1g03530",
+              "index": "1",
+              "interolog_confidence": 2,
+              "correlation_coefficient": 0.754,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }, {
+              "source": "At2g34970",
+              "target": "At1g04170",
+              "index": "1",
+              "interolog_confidence": 15,
+              "correlation_coefficient": 0.847,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }, {
+              "source": "At2g34970",
+              "target": "At1g25420",
+              "index": "1",
+              "interolog_confidence": 2,
+              "correlation_coefficient": 0.754,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }, {
+              "source": "At2g34970",
+              "target": "At1g29940",
+              "index": "1",
+              "interolog_confidence": 3,
+              "correlation_coefficient": 0.773,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }, {
+              "source": "At2g34970",
+              "target": "At1g48970",
+              "index": "1",
+              "interolog_confidence": 125,
+              "correlation_coefficient": 0.759,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }, {
+              "source": "At2g34970",
+              "target": "At1g49240",
+              "index": "1",
+              "interolog_confidence": 1,
+              "correlation_coefficient": 0.395,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }, {
+              "source": "At2g34970",
+              "target": "At1g53880",
+              "index": "1",
+              "interolog_confidence": 208,
+              "correlation_coefficient": 0.757,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }, {
+              "source": "At2g34970",
+              "target": "At1g72320",
+              "index": "1",
+              "interolog_confidence": 2,
+              "correlation_coefficient": 0.803,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }, {
+              "source": "At2g34970",
+              "target": "At1g72340",
+              "index": "1",
+              "interolog_confidence": 1,
+              "correlation_coefficient": 0.563,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }, {
+              "source": "At2g34970",
+              "target": "At2g19710",
+              "index": "1",
+              "interolog_confidence": 1,
+              "correlation_coefficient": 0.321,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }, {
+              "source": "At2g34970",
+              "target": "At2g34970",
+              "index": "0",
+              "interolog_confidence": 2,
+              "correlation_coefficient": 1,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }, {
+              "source": "At2g34970",
+              "target": "At2g40290",
+              "index": "0",
+              "interolog_confidence": 15,
+              "correlation_coefficient": 0.814,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }, {
+              "source": "At2g34970",
+              "target": "At3g07300",
+              "index": "0",
+              "interolog_confidence": 192,
+              "correlation_coefficient": 0.886,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }, {
+              "source": "At2g34970",
+              "target": "At3g11710",
+              "index": "0",
+              "interolog_confidence": 2,
+              "correlation_coefficient": 0.848,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }, {
+              "source": "At2g34970",
+              "target": "At3g12110",
+              "index": "1",
+              "interolog_confidence": 1,
+              "correlation_coefficient": 0.385,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }, {
+              "source": "At2g34970",
+              "target": "At5g19485",
+              "index": "1",
+              "interolog_confidence": 1,
+              "correlation_coefficient": 0,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }, {
+              "source": "At2g34970",
+              "target": "At5g38640",
+              "index": "0",
+              "interolog_confidence": 20,
+              "correlation_coefficient": 0.116,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }],
+            "At5g28770": [{
+              "source": "At5g28770",
+              "target": "At1g22920",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.169,
+              "published": true,
+              "reference": "pubmed:21798944\nAI-1 MAIN\ndoi:10.1126\/science.1203659\ndoi:10.1126\/science.1203877\nbiogrid:597083",
+              "mi": "0018|0018"
+            }, {
+              "source": "At5g28770",
+              "target": "At1g35490",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.1,
+              "published": true,
+              "reference": "doi:10.1038\/nmeth.4343",
+              "mi": "None"
+            }, {
+              "source": "At5g28770",
+              "target": "At1g59530",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.043,
+              "published": true,
+              "reference": "doi:10.1038\/nmeth.4343",
+              "mi": "None"
+            }, {
+              "source": "At5g28770",
+              "target": "At1g75390",
+              "index": "0",
+              "interolog_confidence": 1,
+              "correlation_coefficient": -0.147,
+              "published": true,
+              "reference": "doi:10.1038\/nmeth.4343\npubmed:16709202\nbiogrid:337514\nbiogrid:337488",
+              "mi": "0018|0018"
+            }, {
+              "source": "At5g28770",
+              "target": "At2g18160",
+              "index": "0",
+              "interolog_confidence": 3,
+              "correlation_coefficient": 0.31,
+              "published": true,
+              "reference": "doi:10.1038\/nmeth.4343\npubmed:16709202\nbiogrid:337509\nbiogrid:337484",
+              "mi": "0018|0018"
+            }, {
+              "source": "At5g28770",
+              "target": "At2g22850",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.089,
+              "published": true,
+              "reference": "doi:10.1038\/nmeth.4343",
+              "mi": "None"
+            }, {
+              "source": "At5g28770",
+              "target": "At2g31070",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.317,
+              "published": true,
+              "reference": "doi:10.1038\/nmeth.4343",
+              "mi": "None"
+            }, {
+              "source": "At5g28770",
+              "target": "At2g37120",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.176,
+              "published": true,
+              "reference": "doi:10.1038\/nmeth.4343",
+              "mi": "None"
+            }, {
+              "source": "At5g28770",
+              "target": "At2g45680",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.149,
+              "published": true,
+              "reference": "doi:10.1038\/nmeth.4343",
+              "mi": "None"
+            }, {
+              "source": "At5g28770",
+              "target": "At3g03800",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.109,
+              "published": true,
+              "reference": "doi:10.1126\/science.1203659",
+              "mi": "None"
+            }, {
+              "source": "At5g28770",
+              "target": "At3g07650",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.063,
+              "published": true,
+              "reference": "doi:10.1038\/nmeth.4343",
+              "mi": "None"
+            }, {
+              "source": "At5g28770",
+              "target": "At3g15030",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.174,
+              "published": true,
+              "reference": "doi:10.1038\/nmeth.4343",
+              "mi": "None"
+            }, {
+              "source": "At5g28770",
+              "target": "At3g47620",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.514,
+              "published": true,
+              "reference": "doi:10.1038\/nmeth.4343",
+              "mi": "None"
+            }, {
+              "source": "At5g28770",
+              "target": "At3g49760",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.014,
+              "published": true,
+              "reference": "doi:10.1038\/nmeth.4343",
+              "mi": "None"
+            }, {
+              "source": "At5g28770",
+              "target": "At3g54390",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.054,
+              "published": true,
+              "reference": "doi:10.1038\/nmeth.4343",
+              "mi": "None"
+            }, {
+              "source": "At5g28770",
+              "target": "At3g61910",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.014,
+              "published": true,
+              "reference": "doi:10.1038\/nmeth.4343",
+              "mi": "None"
+            }, {
+              "source": "At5g28770",
+              "target": "At3g62420",
+              "index": "0",
+              "interolog_confidence": 3,
+              "correlation_coefficient": 0.062,
+              "published": true,
+              "reference": "pubmed:16709202\nbiogrid:337485\nbiogrid:337482",
+              "mi": "0018|0018"
+            }, {
+              "source": "At5g28770",
+              "target": "At4g02640",
+              "index": "0",
+              "interolog_confidence": 1,
+              "correlation_coefficient": -0.102,
+              "published": true,
+              "reference": "pubmed:16709202\nbiogrid:337534",
+              "mi": "0064|0018|0018"
+            }, {
+              "source": "At5g28770",
+              "target": "At4g18390",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.169,
+              "published": true,
+              "reference": "doi:10.1038\/nmeth.4343",
+              "mi": "None"
+            }, {
+              "source": "At5g28770",
+              "target": "At4g34590",
+              "index": "0",
+              "interolog_confidence": 2,
+              "correlation_coefficient": -0.128,
+              "published": true,
+              "reference": "doi:10.1038\/nmeth.4343\npubmed:16709202\nbiogrid:337511\nbiogrid:337486",
+              "mi": "0018|0018"
+            }, {
+              "source": "At5g28770",
+              "target": "At4g35550",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.08,
+              "published": true,
+              "reference": "doi:10.1038\/nmeth.4343",
+              "mi": "None"
+            }, {
+              "source": "At5g28770",
+              "target": "At5g08410",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.291,
+              "published": true,
+              "reference": "pubmed:21798944\nAI-1 MAIN\ndoi:10.1126\/science.1203877\nbiogrid:595541",
+              "mi": "0018|0018"
+            }, {
+              "source": "At5g28770",
+              "target": "At5g12980",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.275,
+              "published": true,
+              "reference": "doi:10.1038\/nmeth.4343",
+              "mi": "None"
+            }, {
+              "source": "At5g28770",
+              "target": "At5g17800",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.008,
+              "published": true,
+              "reference": "doi:10.1038\/nmeth.4343",
+              "mi": "None"
+            }, {
+              "source": "At5g28770",
+              "target": "At5g24050",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": "None",
+              "published": true,
+              "reference": "doi:10.1038\/nmeth.4343",
+              "mi": "None"
+            }, {
+              "source": "At5g28770",
+              "target": "At5g24800",
+              "index": "0",
+              "interolog_confidence": 1,
+              "correlation_coefficient": 0.012,
+              "published": true,
+              "reference": "pubmed:16709202\nbiogrid:337532",
+              "mi": "0064|0018|0018"
+            }, {
+              "source": "At5g28770",
+              "target": "At5g28770",
+              "index": "0",
+              "interolog_confidence": 1,
+              "correlation_coefficient": 1,
+              "published": true,
+              "reference": "pubmed:15469500",
+              "mi": "0064|0090"
+            }, {
+              "source": "At5g28770",
+              "target": "At5g43540",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": "None",
+              "published": true,
+              "reference": "doi:10.1038\/nmeth.4343",
+              "mi": "None"
+            }, {
+              "source": "At5g28770",
+              "target": "At5g49450",
+              "index": "1",
+              "interolog_confidence": 3,
+              "correlation_coefficient": 0.333,
+              "published": true,
+              "reference": "doi:10.1038\/nmeth.4343\npubmed:16709202\nbiogrid:337487\nbiogrid:337506",
+              "mi": "0018|0018"
+            }, {
+              "source": "At5g28770",
+              "target": "At5g58080",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.028,
+              "published": true,
+              "reference": "biogrid:1238138\npubmed:24948556",
+              "mi": "0055"
+            }, {
+              "source": "At5g28770",
+              "target": "At3g54620",
+              "index": "0",
+              "interolog_confidence": 1,
+              "correlation_coefficient": 0.409,
+              "published": false,
+              "reference": "None",
+              "mi": "0064"
+            }, {
+              "source": "At5g28770",
+              "target": "At1g01140",
+              "index": "2",
+              "interolog_confidence": 4.67e-5,
+              "correlation_coefficient": 0.202,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At1g08190",
+              "index": "2",
+              "interolog_confidence": 1.29e-5,
+              "correlation_coefficient": 0.157,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At1g09210",
+              "index": "2",
+              "interolog_confidence": 2.16e-5,
+              "correlation_coefficient": -0.195,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At1g09540",
+              "index": "2",
+              "interolog_confidence": 4.45e-5,
+              "correlation_coefficient": "None",
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At1g11890",
+              "index": "2",
+              "interolog_confidence": 8.16e-5,
+              "correlation_coefficient": -0.098,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At1g12200",
+              "index": "2",
+              "interolog_confidence": 2.16e-5,
+              "correlation_coefficient": -0.038,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At1g16290",
+              "index": "2",
+              "interolog_confidence": 9.36e-5,
+              "correlation_coefficient": -0.135,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At1g20070",
+              "index": "2",
+              "interolog_confidence": 1.25e-5,
+              "correlation_coefficient": -0.142,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At1g21060",
+              "index": "2",
+              "interolog_confidence": 9.86e-5,
+              "correlation_coefficient": 0.24,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At1g22160",
+              "index": "2",
+              "interolog_confidence": 4.48e-5,
+              "correlation_coefficient": 0.039,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At1g28140",
+              "index": "2",
+              "interolog_confidence": 2.06e-5,
+              "correlation_coefficient": 0.153,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At1g30520",
+              "index": "2",
+              "interolog_confidence": 1.46e-6,
+              "correlation_coefficient": 0.258,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At1g33060",
+              "index": "2",
+              "interolog_confidence": 4.14e-5,
+              "correlation_coefficient": -0.223,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At1g48330",
+              "index": "2",
+              "interolog_confidence": 1.67e-5,
+              "correlation_coefficient": 0.04,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At1g48840",
+              "index": "2",
+              "interolog_confidence": 2.06e-5,
+              "correlation_coefficient": -0.264,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At1g49870",
+              "index": "2",
+              "interolog_confidence": 9.59e-5,
+              "correlation_coefficient": -0.158,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At1g55740",
+              "index": "2",
+              "interolog_confidence": 4.36e-5,
+              "correlation_coefficient": -0.139,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At1g72500",
+              "index": "2",
+              "interolog_confidence": 3.89e-5,
+              "correlation_coefficient": 0.254,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At1g72640",
+              "index": "2",
+              "interolog_confidence": 6.86e-5,
+              "correlation_coefficient": "None",
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At1g73170",
+              "index": "2",
+              "interolog_confidence": 8.43e-5,
+              "correlation_coefficient": 0.423,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At1g75450",
+              "index": "2",
+              "interolog_confidence": 3.61e-5,
+              "correlation_coefficient": -0.155,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At1g76020",
+              "index": "2",
+              "interolog_confidence": 9.43e-7,
+              "correlation_coefficient": 0.167,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At1g77710",
+              "index": "2",
+              "interolog_confidence": 4.95e-5,
+              "correlation_coefficient": -0.187,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At1g79110",
+              "index": "2",
+              "interolog_confidence": 8.81e-5,
+              "correlation_coefficient": -0.127,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At1g79310",
+              "index": "2",
+              "interolog_confidence": 6.96e-5,
+              "correlation_coefficient": -0.031,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At1g79650",
+              "index": "2",
+              "interolog_confidence": 4.14e-5,
+              "correlation_coefficient": -0.275,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At2g05070",
+              "index": "2",
+              "interolog_confidence": 3.4e-5,
+              "correlation_coefficient": 0.567,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At2g15695",
+              "index": "2",
+              "interolog_confidence": 4.68e-6,
+              "correlation_coefficient": -0.118,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At2g17700",
+              "index": "2",
+              "interolog_confidence": 1.46e-6,
+              "correlation_coefficient": -0.14,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At2g19810",
+              "index": "2",
+              "interolog_confidence": 3.12e-5,
+              "correlation_coefficient": 0.031,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At2g24130",
+              "index": "2",
+              "interolog_confidence": 1.44e-5,
+              "correlation_coefficient": -0.034,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At2g34450",
+              "index": "2",
+              "interolog_confidence": 6.86e-5,
+              "correlation_coefficient": -0.186,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At2g38060",
+              "index": "2",
+              "interolog_confidence": 2.38e-7,
+              "correlation_coefficient": -0.143,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At2g41790",
+              "index": "2",
+              "interolog_confidence": 1.44e-5,
+              "correlation_coefficient": 0.065,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At2g41830",
+              "index": "2",
+              "interolog_confidence": 8.75e-6,
+              "correlation_coefficient": 0.008,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At2g43000",
+              "index": "2",
+              "interolog_confidence": 5.22e-5,
+              "correlation_coefficient": -0.009,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At2g44500",
+              "index": "2",
+              "interolog_confidence": 4.68e-6,
+              "correlation_coefficient": 0.26,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At2g45910",
+              "index": "2",
+              "interolog_confidence": 6.43e-6,
+              "correlation_coefficient": -0.12,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At2g47760",
+              "index": "2",
+              "interolog_confidence": 4.72e-5,
+              "correlation_coefficient": -0.023,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At3g02710",
+              "index": "2",
+              "interolog_confidence": 2.71e-5,
+              "correlation_coefficient": -0.164,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At3g04890",
+              "index": "2",
+              "interolog_confidence": 8.6e-5,
+              "correlation_coefficient": 0.088,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At3g05440",
+              "index": "2",
+              "interolog_confidence": 9.09e-5,
+              "correlation_coefficient": 0.034,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At3g09660",
+              "index": "2",
+              "interolog_confidence": 6.01e-5,
+              "correlation_coefficient": -0.146,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At3g11450",
+              "index": "2",
+              "interolog_confidence": 3.78e-6,
+              "correlation_coefficient": -0.225,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At3g14180",
+              "index": "2",
+              "interolog_confidence": 4.68e-6,
+              "correlation_coefficient": -0.299,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At3g25160",
+              "index": "2",
+              "interolog_confidence": 1.9e-6,
+              "correlation_coefficient": -0.181,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At3g47500",
+              "index": "2",
+              "interolog_confidence": 7.57e-6,
+              "correlation_coefficient": 0.375,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At3g51990",
+              "index": "2",
+              "interolog_confidence": 5.48e-5,
+              "correlation_coefficient": -0.18,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At3g54180",
+              "index": "2",
+              "interolog_confidence": 2.52e-5,
+              "correlation_coefficient": -0.115,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At3g56350",
+              "index": "2",
+              "interolog_confidence": 1.9e-6,
+              "correlation_coefficient": -0.286,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At3g60220",
+              "index": "2",
+              "interolog_confidence": 8.49e-5,
+              "correlation_coefficient": -0.06,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At3g63060",
+              "index": "2",
+              "interolog_confidence": 7.74e-5,
+              "correlation_coefficient": -0.053,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At3g63080",
+              "index": "2",
+              "interolog_confidence": 2.58e-5,
+              "correlation_coefficient": 0.06,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At3g63440",
+              "index": "2",
+              "interolog_confidence": 2.09e-5,
+              "correlation_coefficient": 0.123,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At4g01800",
+              "index": "2",
+              "interolog_confidence": 1.1e-5,
+              "correlation_coefficient": 0.413,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At4g04640",
+              "index": "2",
+              "interolog_confidence": 1.46e-6,
+              "correlation_coefficient": 0.531,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At4g05010",
+              "index": "2",
+              "interolog_confidence": 6.09e-5,
+              "correlation_coefficient": "None",
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At4g09020",
+              "index": "2",
+              "interolog_confidence": 7.16e-6,
+              "correlation_coefficient": -0.169,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At4g11570",
+              "index": "2",
+              "interolog_confidence": 7.03e-5,
+              "correlation_coefficient": 0.182,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At4g12130",
+              "index": "2",
+              "interolog_confidence": 7.16e-6,
+              "correlation_coefficient": -0.3,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At4g16660",
+              "index": "2",
+              "interolog_confidence": 4.68e-6,
+              "correlation_coefficient": -0.153,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At4g17530",
+              "index": "2",
+              "interolog_confidence": 2.8e-6,
+              "correlation_coefficient": -0.04,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At4g18340",
+              "index": "2",
+              "interolog_confidence": 6.22e-5,
+              "correlation_coefficient": 0.249,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At4g22540",
+              "index": "2",
+              "interolog_confidence": 2.92e-5,
+              "correlation_coefficient": 0.283,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At4g26200",
+              "index": "2",
+              "interolog_confidence": 6.86e-5,
+              "correlation_coefficient": -0.051,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At4g26940",
+              "index": "2",
+              "interolog_confidence": 8.16e-5,
+              "correlation_coefficient": 0.043,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At4g26970",
+              "index": "2",
+              "interolog_confidence": 1.27e-6,
+              "correlation_coefficient": 0.093,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At4g32950",
+              "index": "2",
+              "interolog_confidence": 2.52e-5,
+              "correlation_coefficient": 0.014,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At4g34530",
+              "index": "2",
+              "interolog_confidence": 7.16e-6,
+              "correlation_coefficient": "None",
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At4g34860",
+              "index": "2",
+              "interolog_confidence": 2.82e-5,
+              "correlation_coefficient": -0.369,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At4g35760",
+              "index": "2",
+              "interolog_confidence": 6.43e-6,
+              "correlation_coefficient": 0.407,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At4g36010",
+              "index": "2",
+              "interolog_confidence": 3.96e-5,
+              "correlation_coefficient": -0.085,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At4g36790",
+              "index": "2",
+              "interolog_confidence": 4.14e-5,
+              "correlation_coefficient": 0.079,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At4g37710",
+              "index": "2",
+              "interolog_confidence": 3.2e-5,
+              "correlation_coefficient": -0.041,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At4g39730",
+              "index": "2",
+              "interolog_confidence": 1.46e-6,
+              "correlation_coefficient": -0.023,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At4g39800",
+              "index": "2",
+              "interolog_confidence": 2.16e-5,
+              "correlation_coefficient": 0.159,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At4g39900",
+              "index": "2",
+              "interolog_confidence": 1.15e-5,
+              "correlation_coefficient": 0.176,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At5g04900",
+              "index": "2",
+              "interolog_confidence": 8.04e-5,
+              "correlation_coefficient": 0.043,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At5g10500",
+              "index": "2",
+              "interolog_confidence": 1.58e-5,
+              "correlation_coefficient": -0.137,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At5g14640",
+              "index": "2",
+              "interolog_confidence": 1.29e-5,
+              "correlation_coefficient": -0.12,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At5g18450",
+              "index": "2",
+              "interolog_confidence": 9.74e-6,
+              "correlation_coefficient": -0.258,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At5g23050",
+              "index": "2",
+              "interolog_confidence": 9.59e-5,
+              "correlation_coefficient": 0.01,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At5g24880",
+              "index": "2",
+              "interolog_confidence": 1.53e-5,
+              "correlation_coefficient": -0.125,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At5g25540",
+              "index": "2",
+              "interolog_confidence": 2.8e-6,
+              "correlation_coefficient": -0.062,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At5g36170",
+              "index": "2",
+              "interolog_confidence": 1.46e-6,
+              "correlation_coefficient": 0.313,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At5g40382",
+              "index": "2",
+              "interolog_confidence": 4.36e-5,
+              "correlation_coefficient": "None",
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At5g42800",
+              "index": "2",
+              "interolog_confidence": 5.22e-5,
+              "correlation_coefficient": -0.127,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At5g45660",
+              "index": "2",
+              "interolog_confidence": 3.31e-7,
+              "correlation_coefficient": "None",
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At5g54530",
+              "index": "2",
+              "interolog_confidence": 4.93e-5,
+              "correlation_coefficient": -0.048,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At5g55700",
+              "index": "2",
+              "interolog_confidence": 3.31e-7,
+              "correlation_coefficient": -0.08,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At5g55810",
+              "index": "2",
+              "interolog_confidence": 8.29e-5,
+              "correlation_coefficient": -0.011,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At5g56180",
+              "index": "2",
+              "interolog_confidence": 3.4e-5,
+              "correlation_coefficient": 0.057,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At5g56970",
+              "index": "2",
+              "interolog_confidence": 5.22e-5,
+              "correlation_coefficient": -0.153,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At5g58870",
+              "index": "2",
+              "interolog_confidence": 1.9e-5,
+              "correlation_coefficient": 0.505,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At5g61790",
+              "index": "2",
+              "interolog_confidence": 1.1e-5,
+              "correlation_coefficient": -0.258,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At5g61940",
+              "index": "2",
+              "interolog_confidence": 8.49e-5,
+              "correlation_coefficient": -0.122,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At5g64180",
+              "index": "2",
+              "interolog_confidence": 9.59e-5,
+              "correlation_coefficient": 0.041,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At5g65430",
+              "index": "2",
+              "interolog_confidence": 1.9e-6,
+              "correlation_coefficient": 0.152,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At5g65440",
+              "index": "2",
+              "interolog_confidence": 1.9e-6,
+              "correlation_coefficient": 0.091,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At5g66120",
+              "index": "2",
+              "interolog_confidence": 5.01e-5,
+              "correlation_coefficient": 0.227,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }, {
+              "source": "At5g28770",
+              "target": "At5g67280",
+              "index": "2",
+              "interolog_confidence": 8.35e-6,
+              "correlation_coefficient": -0.094,
+              "published": false,
+              "reference": "pubmed:27117388",
+              "mi": "1178"
+            }],
+            "At5g43700": [{
+              "source": "At5g43700",
+              "target": "At1g04100",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.135,
+              "published": true,
+              "reference": "pubmed:21798944\npubmed:21734647\ndoi:10.1038\/nmeth.4343\nAI-1 REPEAT\nAI-1 MAIN\ndoi:10.1126\/science.1203659\ndoi:10.1126\/science.1203877\nbiogrid:1110338\nbiogrid:598091",
+              "mi": "0018|0018|0018"
+            }, {
+              "source": "At5g43700",
+              "target": "At1g04240",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.468,
+              "published": true,
+              "reference": "pubmed:21734647\ndoi:10.1038\/nmeth.4343\nbiogrid:1110310",
+              "mi": "0018"
+            }, {
+              "source": "At5g43700",
+              "target": "At1g04250",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.432,
+              "published": true,
+              "reference": "pubmed:21734647\ndoi:10.1038\/nmeth.4343\nbiogrid:1110331",
+              "mi": "0018"
+            }, {
+              "source": "At5g43700",
+              "target": "At1g04550",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.017,
+              "published": true,
+              "reference": "biogrid:1110336\npubmed:21734647",
+              "mi": "0018"
+            }, {
+              "source": "At5g43700",
+              "target": "At1g15050",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.229,
+              "published": true,
+              "reference": "pubmed:21734647\ndoi:10.1038\/nmeth.4343\nbiogrid:1110349",
+              "mi": "0018"
+            }, {
+              "source": "At5g43700",
+              "target": "At1g15580",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.196,
+              "published": true,
+              "reference": "pubmed:21734647\ndoi:10.1038\/nmeth.4343\nbiogrid:1110341",
+              "mi": "0018"
+            }, {
+              "source": "At5g43700",
+              "target": "At1g15750",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.054,
+              "published": true,
+              "reference": "biogrid:575221\npubmed:22065421",
+              "mi": "0018"
+            }, {
+              "source": "At5g43700",
+              "target": "At1g19220",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.121,
+              "published": true,
+              "reference": "pubmed:21734647\ndoi:10.1038\/nmeth.4343\nbiogrid:1110669",
+              "mi": "0018"
+            }, {
+              "source": "At5g43700",
+              "target": "At1g19850",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.094,
+              "published": true,
+              "reference": "pubmed:25566309\nbiogrid:1110531\npubmed:21734647\nbiogrid:1111770",
+              "mi": "0018|0018"
+            }, {
+              "source": "At5g43700",
+              "target": "At1g30330",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.042,
+              "published": true,
+              "reference": "pubmed:25566309\nbiogrid:1110580\npubmed:21734647\nbiogrid:1111799",
+              "mi": "0018|0018"
+            }, {
+              "source": "At5g43700",
+              "target": "At1g34170",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.064,
+              "published": true,
+              "reference": "biogrid:1110662\npubmed:21734647",
+              "mi": "0018"
+            }, {
+              "source": "At5g43700",
+              "target": "At1g51950",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.205,
+              "published": true,
+              "reference": "biogrid:1110330\npubmed:21734647",
+              "mi": "0018"
+            }, {
+              "source": "At5g43700",
+              "target": "At1g52830",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.218,
+              "published": true,
+              "reference": "doi:10.1038\/nmeth.4343",
+              "mi": "None"
+            }, {
+              "source": "At5g43700",
+              "target": "At1g61660",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.271,
+              "published": true,
+              "reference": "doi:10.1038\/nmeth.4343",
+              "mi": "None"
+            }, {
+              "source": "At5g43700",
+              "target": "At1g68185",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.298,
+              "published": true,
+              "reference": "biogrid:933471\npubmed:20855607",
+              "mi": "0018"
+            }, {
+              "source": "At5g43700",
+              "target": "At1g80390",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": "None",
+              "published": true,
+              "reference": "biogrid:1110333\npubmed:21734647",
+              "mi": "0018"
+            }, {
+              "source": "At5g43700",
+              "target": "At2g01200",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": "None",
+              "published": true,
+              "reference": "doi:10.1038\/nmeth.4343",
+              "mi": "None"
+            }, {
+              "source": "At5g43700",
+              "target": "At2g22670",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.099,
+              "published": true,
+              "reference": "pubmed:21734647\ndoi:10.1038\/nmeth.4343\nbiogrid:1110340",
+              "mi": "0018"
+            }, {
+              "source": "At5g43700",
+              "target": "At2g33310",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.087,
+              "published": true,
+              "reference": "pubmed:21734647\ndoi:10.1038\/nmeth.4343\nbiogrid:1110335",
+              "mi": "0018"
+            }, {
+              "source": "At5g43700",
+              "target": "At2g46990",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.146,
+              "published": true,
+              "reference": "biogrid:1110353\npubmed:21734647",
+              "mi": "0018"
+            }, {
+              "source": "At5g43700",
+              "target": "At3g04730",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.473,
+              "published": true,
+              "reference": "pubmed:21734647\ndoi:10.1038\/nmeth.4343\nbiogrid:1110332",
+              "mi": "0018"
+            }, {
+              "source": "At5g43700",
+              "target": "At3g15540",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.266,
+              "published": true,
+              "reference": "pubmed:21734647\ndoi:10.1038\/nmeth.4343\nbiogrid:1110329",
+              "mi": "0018"
+            }, {
+              "source": "At5g43700",
+              "target": "At3g16500",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.088,
+              "published": true,
+              "reference": "doi:10.1038\/nmeth.4343",
+              "mi": "None"
+            }, {
+              "source": "At5g43700",
+              "target": "At3g16830",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.183,
+              "published": true,
+              "reference": "biogrid:575222\npubmed:22065421",
+              "mi": "0018"
+            }, {
+              "source": "At5g43700",
+              "target": "At3g23030",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.373,
+              "published": true,
+              "reference": "pubmed:21734647\ndoi:10.1038\/nmeth.4343\nbiogrid:1110300",
+              "mi": "0018"
+            }, {
+              "source": "At5g43700",
+              "target": "At3g23050",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.471,
+              "published": true,
+              "reference": "doi:10.1038\/nmeth.4343",
+              "mi": "None"
+            }, {
+              "source": "At5g43700",
+              "target": "At3g62100",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.066,
+              "published": true,
+              "reference": "biogrid:1110350\npubmed:21734647",
+              "mi": "0018"
+            }, {
+              "source": "At5g43700",
+              "target": "At4g14550",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.377,
+              "published": true,
+              "reference": "pubmed:21734647\ndoi:10.1038\/nmeth.4343\nbiogrid:1110334",
+              "mi": "0018"
+            }, {
+              "source": "At5g43700",
+              "target": "At4g14560",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.526,
+              "published": true,
+              "reference": "pubmed:21734647\ndoi:10.1038\/nmeth.4343\n197410\ndoi:10.1126\/science.1203659\nbiogrid:1110265",
+              "mi": "0018|0018|0018"
+            }, {
+              "source": "At5g43700",
+              "target": "At4g23980",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.207,
+              "published": true,
+              "reference": "biogrid:1110637\npubmed:21734647",
+              "mi": "0018"
+            }, {
+              "source": "At5g43700",
+              "target": "At4g26840",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.199,
+              "published": true,
+              "reference": "biogrid:933605\npubmed:20855607",
+              "mi": "0004"
+            }, {
+              "source": "At5g43700",
+              "target": "At4g28640",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.322,
+              "published": true,
+              "reference": "pubmed:21734647\ndoi:10.1038\/nmeth.4343\nbiogrid:1110337",
+              "mi": "0018"
+            }, {
+              "source": "At5g43700",
+              "target": "At4g29080",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.155,
+              "published": true,
+              "reference": "pubmed:21734647\ndoi:10.1038\/nmeth.4343\nbiogrid:1110352",
+              "mi": "0018"
+            }, {
+              "source": "At5g43700",
+              "target": "At5g12980",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.344,
+              "published": true,
+              "reference": "doi:10.1038\/nmeth.4343",
+              "mi": "None"
+            }, {
+              "source": "At5g43700",
+              "target": "At5g20730",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.034,
+              "published": true,
+              "reference": "pubmed:25566309\nbiogrid:1110588\npubmed:21734647\nbiogrid:1111828",
+              "mi": "0018|0018"
+            }, {
+              "source": "At5g43700",
+              "target": "At5g25890",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.157,
+              "published": true,
+              "reference": "pubmed:21734647\ndoi:10.1038\/nmeth.4343\nbiogrid:1110351",
+              "mi": "0018"
+            }, {
+              "source": "At5g43700",
+              "target": "At5g37020",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.014,
+              "published": true,
+              "reference": "biogrid:1111856\npubmed:25566309",
+              "mi": "0018"
+            }, {
+              "source": "At5g43700",
+              "target": "At5g43700",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 1,
+              "published": true,
+              "reference": "pubmed:21734647\ndoi:10.1126\/science.1203659\nbiogrid:1110317",
+              "mi": "0018"
+            }, {
+              "source": "At5g43700",
+              "target": "At5g52547",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": "None",
+              "published": true,
+              "reference": "pubmed:21798944\nAI-1 MAIN\ndoi:10.1126\/science.1203877\nbiogrid:600150",
+              "mi": "0018|0018"
+            }, {
+              "source": "At5g43700",
+              "target": "At5g55170",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.249,
+              "published": true,
+              "reference": "biogrid:933561\npubmed:20855607",
+              "mi": "0004"
+            }, {
+              "source": "At5g43700",
+              "target": "At5g60450",
+              "index": "1",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.057,
+              "published": true,
+              "reference": "biogrid:1111741\npubmed:25566309",
+              "mi": "0018"
+            }, {
+              "source": "At5g43700",
+              "target": "At5g65670",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.293,
+              "published": true,
+              "reference": "biogrid:1110339\npubmed:21734647",
+              "mi": "0018"
+            }, {
+              "source": "At5g43700",
+              "target": "HOPH1_group",
+              "index": "0",
+              "interolog_confidence": 0,
+              "correlation_coefficient": "None",
+              "published": true,
+              "reference": "doi:10.1126\/science.1203659",
+              "mi": "0018"
+            }, {
+              "source": "At5g43700",
+              "target": "At2g34710",
+              "index": "2",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.087,
+              "published": true,
+              "reference": "pubmed:25533953",
+              "mi": "0432"
+            }, {
+              "source": "At5g43700",
+              "target": "At3g23090",
+              "index": "2",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.076,
+              "published": true,
+              "reference": "pubmed:25533953",
+              "mi": "0432"
+            }, {
+              "source": "At5g43700",
+              "target": "At4g35160",
+              "index": "2",
+              "interolog_confidence": 0,
+              "correlation_coefficient": -0.251,
+              "published": true,
+              "reference": "pubmed:25533953",
+              "mi": "0432"
+            }, {
+              "source": "At5g43700",
+              "target": "At5g12870",
+              "index": "2",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.117,
+              "published": true,
+              "reference": "pubmed:22037706\npubmed:25533953",
+              "mi": "0432"
+            }, {
+              "source": "At5g43700",
+              "target": "At5g23020",
+              "index": "2",
+              "interolog_confidence": 0,
+              "correlation_coefficient": 0.24,
+              "published": true,
+              "reference": "pubmed:25352272",
+              "mi": "0432"
+            }],
+            "Double_Dap_Seq" : [
+              {
+                "bzip1": "AT5G28770",
+                "bzip2": "AT4G34590",
+                "target": "AT4G22590",
+                "q-value": "999"
+              },
+              {
+                "bzip1": "AT5G28770",
+                "bzip2": "AT4G34590",
+                "target": "AT4G22592",
+                "q-value": "999"
+              },
+              {
+                "bzip1": "AT5G28770",
+                "bzip2": "AT4G34590",
+                "target": "AT2G43120",
+                "q-value": "999"
+              },
+              {
+                "bzip1": "AT5G28770",
+                "bzip2": "AT4G34590",
+                "target": "AT4G01120",
+                "q-value": "999"
+              },
+              {
+                "bzip1": "AT5G28770",
+                "bzip2": "AT4G34590",
+                "target": "AT5G58650",
+                "q-value": "999"
+              },
+              {
+                "bzip1": "AT5G28770",
+                "bzip2": "AT3G62420",
+                "target": "AT1G69570",
+                "q-value": "999"
+              },
+              {
+                "bzip1": "AT5G28770",
+                "bzip2": "AT3G62420",
+                "target": "AT4G01120",
+                "q-value": "999"
+              },
+              {
+                "bzip1": "AT5G28770",
+                "bzip2": "AT3G62420",
+                "target": "AT5G62320",
+                "q-value": "999"
+              },
+              {
+                "bzip1": "AT5G28770",
+                "bzip2": "AT3G62420",
+                "target": "AT4G22590",
+                "q-value": "999"
+              }
+            ]
+          };
+        //console.log('Before return');  
+        return {res: res, ajaxCallType: 'BAR'} ;     
+        //ajaxCallType for identifying when parsing Promise.all response array 
+        */
     };
 
     /**
