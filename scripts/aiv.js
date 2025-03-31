@@ -856,6 +856,7 @@
      * @returns {string} - a nicely parsed HTML table
      */
 
+    /* Trial using listner + get call to API
     AIV.createPDItable = function (arrayPDIdata) {
       let queryPDIsInChr = {};
       let targets = [];
@@ -928,21 +929,20 @@
 
                                         // TD added
                                         // Obtaining the AGIs of bZIPs involved
-                                          AGI_bZIP1 = getbZIP(PDI.bzip1);
-                                          AGI_bZIP2 = getbZIP(PDI.bzip2);
+                                          // AGI_bZIP1 = getbZIP(PDI.bzip1);
+                                          // AGI_bZIP2 = getbZIP(PDI.bzip2);
 
                                         // Obtaining the chrnum,start and end nucleotide by calling API passing in targetgene
-                                        let serviceURL = 'https://bar.utoronto.ca/api/gene_information/single_gene_query/arabidopsis/targetDNAGene';
+                                        // let serviceURL = 'https://bar.utoronto.ca/api/gene_information/single_gene_query/arabidopsis/targetDNAGene';
                                         
-                                        return $.ajax({
+                                        // return $.ajax({
                                         
-                                        url: serviceURL,
-                                        type: 'GET',
-                                        data: JSON.stringify(postObj),
-                                        dataType: "json"
-                                        })
-                                        .then( res => ( {res: res, ajaxCallType: 'BAR'} )); 
-
+                                        // url: serviceURL,
+                                        // type: 'GET',
+                                        // dataType: "json"
+                                        // })
+                                        // .then( res => ( {res: res, ajaxCallType: 'BAR'} )); 
+                                        
                                         // Not sure where but from the returned API data, extract these parameters:
                                         // "chromosome": "Chr1", "start": 3631, "end": 5899 and store in variables
                                         // get 1 from chromosome not Chr1
@@ -985,10 +985,11 @@
   
       return htmlTABLE;
   };
+  */
   
-
-    /*
-    // CHAITALI
+  /*
+    
+    // CHAITALI - og
     AIV.createPDItable = function (arrayPDIdata) {
       let queryPDIsInChr = {};
       let targets = [];
@@ -1073,133 +1074,232 @@
   
       return htmlTABLE;
   };
+
   */
 
   
-  /*
+  
+  // // This code works - computational is maintained and links to google.
+  //   AIV.createPDItable = function (arrayPDIdata) {
+  //       //console.log('TD~',arrayPDIdata);
+  //       let queryPDIsInChr = {};
+  //       let targets = [];
+  //       let pubmedRefHashTable = {};
+  //       let pValueHashTable = {};
+  //       let htmlTABLE = "<div class='pdi-table-scroll-pane'><table><tbody><tr><th></th>";
+  //       arrayPDIdata.forEach(function(PDI){ //populate local data to be used in another loop
+  //           // TD~ console.log("looping through each element of PDI array", PDI);
+  //           //TD~
+  //           //console.log('PDIsInCHR before DDAP',queryPDIsInChr);    
+  //           //clg(PDI);
+  //           if (PDI.bzip1 !== undefined) {
+  //               //console.log('Only enter when bzip1 exists',PDI.bzip1)
 
-    AIV.createPDItable = function (arrayPDIdata) {
-        //console.log('TD~',arrayPDIdata);
-        let queryPDIsInChr = {};
-        let targets = [];
-        let pubmedRefHashTable = {};
-        let pValueHashTable = {};
-        let htmlTABLE = "<div class='pdi-table-scroll-pane'><table><tbody><tr><th></th>";
-        arrayPDIdata.forEach(function(PDI){ //populate local data to be used in another loop
-            // TD~ console.log("looping through each element of PDI array", PDI);
-            //TD~
-            //console.log('PDIsInCHR before DDAP',queryPDIsInChr);    
-            //clg(PDI);
-            if (PDI.bzip1 !== undefined) {
-                //console.log('Only enter when bzip1 exists',PDI.bzip1)
+  //               //TD~Mar23 newline for dds data header starts
+  //               let dds_source = PDI.bzip1 + "+" + "\n"  + PDI.bzip2;
+  //               //console.log('TD~ DDS Source',dds_source);
+  //               //TD~Mar23 newline for dds data header ends
 
-                //TD~Mar23 newline for dds data header starts
-                let dds_source = PDI.bzip1 + "+" + "\n"  + PDI.bzip2;
-                //console.log('TD~ DDS Source',dds_source);
-                //TD~Mar23 newline for dds data header ends
+  //               //TD~Mar23 changed hasownproperty starts
+  //               if (!queryPDIsInChr.hasOwnProperty(dds_source)) {
+  //                   queryPDIsInChr[dds_source] = []; //create property with name of query/source gene
+  //               }
+  //               //TD~Mar23 changed hasownproperty ends
 
-                //TD~Mar23 changed hasownproperty starts
-                if (!queryPDIsInChr.hasOwnProperty(dds_source)) {
-                    queryPDIsInChr[dds_source] = []; //create property with name of query/source gene
-                }
-                //TD~Mar23 changed hasownproperty ends
-
-                queryPDIsInChr[dds_source].push(PDI.target);    
-                //console.log('TD~ After Push',queryPDIsInChr,PDI.target)
+  //               queryPDIsInChr[dds_source].push(PDI.target);    
+  //               //console.log('TD~ After Push',queryPDIsInChr,PDI.target)
                 
-                if (targets.indexOf(PDI.target) === -1) {//To not repeat PDI for two queries with same PDI
-                    targets.push(PDI.target);
-                }
-                //pubmedRefHashTable[`${PDI.source}_${PDI.target}`] = 9999; 
-            }
-            else {
-                if (!queryPDIsInChr.hasOwnProperty(PDI.source)) {
-                    queryPDIsInChr[PDI.source] = []; //create property with name of query/source gene
-                }
-                queryPDIsInChr[PDI.source].push(PDI.target);
-                if (targets.indexOf(PDI.target) === -1) {//To not repeat PDI for two queries with same PDI
-                    targets.push(PDI.target);
-                }
-                pubmedRefHashTable[`${PDI.source}_${PDI.target}`] = PDI.reference;
-                pValueHashTable[`${PDI.source}_${PDI.target}`] = PDI.interolog_confidence;
+  //               if (targets.indexOf(PDI.target) === -1) {//To not repeat PDI for two queries with same PDI
+  //                   targets.push(PDI.target);
+  //               }
+  //               //pubmedRefHashTable[`${PDI.source}_${PDI.target}`] = 9999; 
+  //           }
+  //           else {
+  //               if (!queryPDIsInChr.hasOwnProperty(PDI.source)) {
+  //                   queryPDIsInChr[PDI.source] = []; //create property with name of query/source gene
+  //               }
+  //               queryPDIsInChr[PDI.source].push(PDI.target);
+  //               if (targets.indexOf(PDI.target) === -1) {//To not repeat PDI for two queries with same PDI
+  //                   targets.push(PDI.target);
+  //               }
+  //               pubmedRefHashTable[`${PDI.source}_${PDI.target}`] = PDI.reference;
+  //               pValueHashTable[`${PDI.source}_${PDI.target}`] = PDI.interolog_confidence;
     
-            }
-        });
+  //           }
+  //       });
         
-        //TD~
-        //console.log('TD~ PDIsInCHR after DDAP',queryPDIsInChr);    
+  //       //TD~
+  //       //console.log('TD~ PDIsInCHR after DDAP',queryPDIsInChr);    
 
-        for (let protein of Object.keys(queryPDIsInChr)) { //add query proteins to the header of table
-            htmlTABLE += `<th>${protein}<br>(${queryPDIsInChr[protein].length} PDIs)</th>`;
-        }
+  //       for (let protein of Object.keys(queryPDIsInChr)) { //add query proteins to the header of table
+  //           htmlTABLE += `<th>${protein}<br>(${queryPDIsInChr[protein].length} PDIs)</th>`;
+  //       }
         
-        htmlTABLE += "</tr>";
-        targets.forEach(function(targetDNAGene){ //process remaining rows for each target DNA gene
-            htmlTABLE += `<tr><td>${targetDNAGene}</td>`;
-            for (let queryGene of Object.keys(queryPDIsInChr)) { //recall the keys are the source (i.e. query genes)
-                //console.log('TD~ QueryGENE::',queryGene,targetDNAGene)
-                if (queryGene.includes("+")) {
-                    let cellContent = '<td>';
+  //       htmlTABLE += "</tr>";
+  //       targets.forEach(function(targetDNAGene){ //process remaining rows for each target DNA gene
+  //           htmlTABLE += `<tr><td>${targetDNAGene}</td>`;
+  //           for (let queryGene of Object.keys(queryPDIsInChr)) { //recall the keys are the source (i.e. query genes)
+  //               //console.log('TD~ QueryGENE::',queryGene,targetDNAGene)
+  //               if (queryGene.includes("+")) {
+  //                   let cellContent = '<td>';
 
-                    if (queryPDIsInChr[queryGene].includes(targetDNAGene)) {
+  //                   if (queryPDIsInChr[queryGene].includes(targetDNAGene)) {
                       
-                //cellContent += `<td style="background-color: #E8E8E8; text-align: center; width: 30px; height: 30px;">
-                //<a href="https://www.google.com" target="_blank">
-                   //<img src="dDAP-seq_symbol.png" 
-                       // style="max-width: 100%; max-height: 100%; display: block; margin: auto; cursor: pointer;">
-               // </a>
-             //</td>`;
+  //               cellContent += `<td style="background-color: #E8E8E8; text-align: center; width: 30px; height: 30px;">
+  //               <a href="https://www.google.com" target="_blank">
+  //                 <img src="dDAP-seq_symbol.png" 
+  //                      style="max-width: 100%; max-height: 100%; display: block; margin: auto; cursor: pointer;">
+  //              </a>
+  //            </td>`;
 
-                    }
-                    else {
-                        cellContent += ''; 
-                        //console.log('TD~ In else',targetDNAGene,cellContent)
-                    }
+  //                   }
+  //                   else {
+  //                       cellContent += ''; 
+  //                       //console.log('TD~ In else',targetDNAGene,cellContent)
+  //                   }
                     
-                    cellContent += '</td>'; 
-                    //console.log("TD~ Cell:",cellContent);
-                    htmlTABLE += cellContent;
-                }
-                    */
-                   /*
-                else {
-                    if (queryPDIsInChr[queryGene].indexOf(targetDNAGene) !== -1) { //indexOf returns -1 if not found
-                        let cellContent = "<td>";
-                        let fontawesome = '';
-                        if (pValueHashTable[queryGene + '_' + targetDNAGene] === 0){ //i.e. experimental PDI
-                           cellContent = "<td class='experimental-pdi-cell'>";
-                           fontawesome = 'flask';
-                           if (pubmedRefHashTable[queryGene + '_' + targetDNAGene] === "doi:10.1016/j.cell.2016.04.038"){ // TODO: change this to  DAP-Seq PMID once db is updated
-                               fontawesome = 'dna';
-                           }
-                        }
-                           */
-                          /*
-                        else if (pValueHashTable[queryGene + '_' + targetDNAGene] > 0){ // i.e. predicted PDI
-                            cellContent = "<td class='predicted-pdi-cell'>";
-                            fontawesome = 'terminal';
-                            */
-                        //}
-                        //AIV.memoizedSanRefIDs(pubmedRefHashTable[queryGene + '_' + targetDNAGene]).forEach(function(ref){
-                            //cellContent += AIV.memoizedRetRefLink(ref, targetDNAGene, queryGene).replace(/("_blank">).*/, "$1") + /* replace innerHTML text returned */
-                                //`<i class="fas fa-${fontawesome}"></i>` +
-                                //'</a>';
-                       //});
-                        /*
-                        htmlTABLE += cellContent + '</td>';
-                    }
-                    else {
-                        htmlTABLE += '<td></td>';
-                    }
-                }
-            }
-            htmlTABLE += "</tr>"; 
-        });
-        htmlTABLE += "</tbody></table></div>";
-        // console.log("finished createPDITable function execution", queryPDIsInChr);
-        return htmlTABLE;
-    };
-  */
+  //                   cellContent += '</td>'; 
+  //                   //console.log("TD~ Cell:",cellContent);
+  //                   htmlTABLE += cellContent;
+  //               }
+  //               else {
+  //                   if (queryPDIsInChr[queryGene].indexOf(targetDNAGene) !== -1) { //indexOf returns -1 if not found
+  //                       let cellContent = "<td>";
+  //                       let fontawesome = '';
+  //                       if (pValueHashTable[queryGene + '_' + targetDNAGene] === 0){ //i.e. experimental PDI
+  //                          cellContent = "<td class='experimental-pdi-cell'>";
+  //                          fontawesome = 'flask';
+  //                          if (pubmedRefHashTable[queryGene + '_' + targetDNAGene] === "doi:10.1016/j.cell.2016.04.038"){ // TODO: change this to  DAP-Seq PMID once db is updated
+  //                              fontawesome = 'dna';
+  //                          }
+  //                       }
+                           
+                         
+  //                       else if (pValueHashTable[queryGene + '_' + targetDNAGene] > 0){ // i.e. predicted PDI
+  //                           cellContent = "<td class='predicted-pdi-cell'>";
+  //                           fontawesome = 'terminal';
+                            
+  //                       }
+  //                       AIV.memoizedSanRefIDs(pubmedRefHashTable[queryGene + '_' + targetDNAGene]).forEach(function(ref){
+  //                           cellContent += AIV.memoizedRetRefLink(ref, targetDNAGene, queryGene).replace(/("_blank">).*/, "$1") + /* replace innerHTML text returned */
+  //                               `<i class="fas fa-${fontawesome}"></i>` +
+  //                               '</a>';
+  //                      });
+                        
+  //                       htmlTABLE += cellContent + '</td>';
+  //                   }
+  //                   else {
+  //                       htmlTABLE += '<td></td>';
+  //                   }
+  //               }
+  //           }
+  //           htmlTABLE += "</tr>"; 
+  //       });
+  //       htmlTABLE += "</tbody></table></div>";
+  //       // console.log("finished createPDITable function execution", queryPDIsInChr);
+  //       return htmlTABLE;
+  //   };
+
+    // Trying this code:
+    AIV.createPDItable = function (arrayPDIdata) {
+      let queryPDIsInChr = {};
+      let targets = [];
+      let pubmedRefHashTable = {};
+      let pValueHashTable = {};
+      let htmlTABLE = "<div class='pdi-table-scroll-pane'><table id='pdiTable'><tbody><tr><th></th>";
+  
+      arrayPDIdata.forEach(function (PDI) {
+          if (PDI.bzip1 !== undefined) {
+              let dds_source = PDI.bzip1 + "+" + "\n" + PDI.bzip2;
+  
+              if (!queryPDIsInChr.hasOwnProperty(dds_source)) {
+                  queryPDIsInChr[dds_source] = [];
+              }
+  
+              queryPDIsInChr[dds_source].push(PDI.target);
+  
+              if (targets.indexOf(PDI.target) === -1) {
+                  targets.push(PDI.target);
+              }
+          } else {
+              if (!queryPDIsInChr.hasOwnProperty(PDI.source)) {
+                  queryPDIsInChr[PDI.source] = [];
+              }
+              queryPDIsInChr[PDI.source].push(PDI.target);
+              if (targets.indexOf(PDI.target) === -1) {
+                  targets.push(PDI.target);
+              }
+              pubmedRefHashTable[`${PDI.source}_${PDI.target}`] = PDI.reference;
+              pValueHashTable[`${PDI.source}_${PDI.target}`] = PDI.interolog_confidence;
+          }
+      });
+  
+      for (let protein of Object.keys(queryPDIsInChr)) {
+          htmlTABLE += `<th>${protein}<br>(${queryPDIsInChr[protein].length} PDIs)</th>`;
+      }
+  
+      htmlTABLE += "</tr>";
+      targets.forEach(function (targetDNAGene) {
+          htmlTABLE += `<tr><td>${targetDNAGene}</td>`;
+          for (let queryGene of Object.keys(queryPDIsInChr)) {
+              if (queryGene.includes("+")) {
+                  let cellContent = '<td>';
+  
+                  if (queryPDIsInChr[queryGene].includes(targetDNAGene)) {
+                      cellContent += `<td style="background-color: #E8E8E8; text-align: center; width: 30px; height: 30px;">
+                      <img src="dDAP-seq_symbol.png" class="clickable-image" style="max-width: 100%; max-height: 100%; display: block; margin: auto; cursor: pointer;">
+                      </td>`;
+                  } else {
+                      cellContent += '';
+                  }
+  
+                  cellContent += '</td>';
+                  htmlTABLE += cellContent;
+              } else {
+                  if (queryPDIsInChr[queryGene].indexOf(targetDNAGene) !== -1) {
+                      let cellContent = "<td>";
+                      let fontawesome = '';
+  
+                      if (pValueHashTable[queryGene + '_' + targetDNAGene] === 0) {
+                          cellContent = "<td class='experimental-pdi-cell'>";
+                          fontawesome = 'flask';
+                          if (pubmedRefHashTable[queryGene + '_' + targetDNAGene] === "doi:10.1016/j.cell.2016.04.038") {
+                              fontawesome = 'dna';
+                          }
+                      } else if (pValueHashTable[queryGene + '_' + targetDNAGene] > 0) {
+                          cellContent = "<td class='predicted-pdi-cell'>";
+                          fontawesome = 'terminal';
+                      }
+  
+                      AIV.memoizedSanRefIDs(pubmedRefHashTable[queryGene + '_' + targetDNAGene]).forEach(function (ref) {
+                          cellContent += AIV.memoizedRetRefLink(ref, targetDNAGene, queryGene).replace(/("_blank">).*/, "$1") +
+                              `<i class="fas fa-${fontawesome}"></i>` +
+                              '</a>';
+                      });
+  
+                      htmlTABLE += cellContent + '</td>';
+                  } else {
+                      htmlTABLE += '<td></td>';
+                  }
+              }
+          }
+          htmlTABLE += "</tr>";
+      });
+      htmlTABLE += "</tbody></table></div>";
+  
+      // Add event listener for dynamically created images
+      setTimeout(() => {
+          document.getElementById("pdiTable").addEventListener("click", function (event) {
+              if (event.target.classList.contains("clickable-image")) {
+                  window.open("http://hlab.bio.nyu.edu/?data=projects%2Fbzip_code_jbrowse&loc=chrnum%chrnumAstart_nuc..end_nuc&tracks=bowtie2_23%2FbZIP_rr%2FbZIPA_Col-B_p1%2Cbowtie2_23%2FbZIP_rr%2FbZIPA_Col-B_p2%2Cgem_07_rep%2FbZIP..bZIP_rr%2Fps-bZIPA..ph-bZIPB_Col..h-B%2Fnuc1_GEM_events%2CAraport11_Ensembl48_genes%2Cgem_07_rep%2FbZIP_rr%2FbZIPB_Col-B%2Fnuc1_GEM_events%2Cgem_07_rep%2FbZIP_rr%2FbZIPA_Col-B%2Fnuc1_GEM_events%2Cbowtie2_23%2FbZIP_rr%2FbZIPB_Col-B_o2%2Cbowtie2_23%2FbZIP_rr%2FbZIPB_Col-B_o1%2Cbowtie2_23%2FbZIP..bZIP_rr%2Fps-bZIPA..ph-bZIPB_Col..h-B_p1%2CAth_TAIR10&highlight=", "_blank");
+              }
+          });
+      }, 100);
+  
+      return htmlTABLE;
+  };
+  
+  
 
     /**
      * @namespace {object} AIV
